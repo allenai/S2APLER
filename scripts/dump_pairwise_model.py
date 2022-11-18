@@ -135,6 +135,8 @@ cluster_metrics_s2, b3_metrics_per_signature_s2 = cluster_eval(
     use_s2_clusters=True,
 )
 
+# S2APLER Clustering Performance: {'B3 (P, R, F1)': (0.99895, 0.99826, 0.99861)}
+# S2 Old Clustering Performance: {'B3 (P, R, F1)': (0.99951, 0.99476, 0.99713)}
 print("S2APLER Clustering Performance:", cluster_metrics)
 print("S2 Old Clustering Performance:", cluster_metrics_s2)
 

@@ -1,5 +1,5 @@
-# S2APLER
-This repository provides access to the paper clustering dataset and production model. This work was done by Shaurya Rohatgi (mostly dataset) and Sergey Feldman (mostly model), with lots of help from many folks, including: Doug Downey, Rodney Kinney, Regan Huff and Caroline Wu.
+# S2APLER:  Semantic Scholar (S2) Agglomeration of Papers with Low Error Rate
+This repository provides access to the paper clustering dataset and production model. This work was done by Shaurya Rohatgi (dataset mostly) and Sergey Feldman (model mostly), with lots of help from many folks, including: Doug Downey, Regan Huff, Rodney Kinney and Caroline Wu.
 
 The model will be live on semanticscholar.org.
 
