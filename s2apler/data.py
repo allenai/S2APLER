@@ -35,32 +35,19 @@ from s2apler.text import (
 logger = logging.getLogger("s2apler")
 
 
-class NameCounts(NamedTuple):
-    first: Optional[int]
-    last: Optional[int]
-    first_last: Optional[int]
-    last_first_initial: Optional[int]
-
-
 class Author(NamedTuple):
-    author_info_first: Optional[str]
+    author_info_first: str
     author_info_first_normalized_without_apostrophe: Optional[str]
-    author_info_middle: Optional[str]
+    author_info_middle: str
     author_info_middle_normalized_without_apostrophe: Optional[str]
     author_info_last_normalized: Optional[str]
     author_info_last: str
     author_info_suffix_normalized: Optional[str]
-    author_info_suffix: Optional[str]
+    author_info_suffix: str
     author_info_first_normalized: Optional[str]
     author_info_middle_normalized: Optional[str]
     author_info_full_name: Optional[str]
     author_info_first_letters: Optional[set]
-    author_info_affiliations: List[str]
-    author_info_affiliations_joined: Optional[Counter]
-    author_info_email: Optional[str]
-    author_info_email_prefix: Optional[str]
-    author_info_email_suffix: Optional[str]
-    author_info_position: int
 
 
 class Paper(NamedTuple):
@@ -173,24 +160,18 @@ class PDData:
                 abstract_ngrams_words=None,
                 authors=[
                     Author(
-                        author_info_first=author["first"],
+                        author_info_first=author.get("first", None),
                         author_info_first_normalized_without_apostrophe=None,
-                        author_info_middle=" ".join(author["middle"]),
+                        author_info_middle=" ".join(author.get("middle", [])),
                         author_info_middle_normalized_without_apostrophe=None,
                         author_info_last_normalized=None,
-                        author_info_last=author["last"],
+                        author_info_last=author.get("last", None),
                         author_info_suffix_normalized=None,
-                        author_info_suffix=author["suffix"],
+                        author_info_suffix=author.get("suffix", None),
                         author_info_first_normalized=None,
                         author_info_middle_normalized=None,
                         author_info_full_name=None,
-                        author_info_affiliations=author["affiliations"],
                         author_info_first_letters=None,
-                        author_info_affiliations_joined=None,
-                        author_info_email=author["email"],
-                        author_info_email_prefix=None,
-                        author_info_email_suffix=None,
-                        author_info_position=author["position"],
                     )
                     for author in paper["authors"]
                 ],
@@ -919,27 +900,9 @@ def preprocess_authors(author):
     if len(author_info_last_normalized) > 0:
         author_info_first_letters.add(author_info_last_normalized[0])
 
-    """
-    affiliations = [normalize_text(affiliation) for affiliation in author.author_info_affiliations]
-    affiliations_joined = " ".join(affiliations)
-
-    if author.author_info_email is not None and len(author.author_info_email) > 0:
-        email = author.author_info_email if "@" in author.author_info_email else author.author_info_email + "@MISSING"
-        split_email = email.split("@")
-        author_info_email_prefix = "".join(split_email[:-1])
-        author_info_email_suffix = split_email[-1]
-    else:
-        author_info_email_prefix = ""
-        author_info_email_suffix = ""
-    """
-
     author = author._replace(
         author_info_full_name=get_full_name_for_features(author).strip(),
-        # author_info_affiliations=affiliations,
         author_info_first_letters=author_info_first_letters,
-        # author_info_affiliations_joined=affiliations_joined,
-        # author_info_email_prefix=author_info_email_prefix,
-        # author_info_email_suffix=author_info_email_suffix,
     )
 
     return author
@@ -988,27 +951,10 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         use_unigrams=True,
         use_bigrams=True,
     )
-    # author_info_coauthor_email_prefix_n_grams = get_text_ngrams(
-    #     " ".join([i.author_info_email_prefix for i in authors]),
-    #     stopwords=None,
-    #     use_unigrams=True,
-    #     use_bigrams=True,
-    # )
-    # author_info_coauthor_email_suffix_n_grams = get_text_ngrams(
-    #     " ".join([i.author_info_email_suffix for i in authors]),
-    #     stopwords=None,
-    #     use_bigrams=True,
-    # )
-    # affils = [i.author_info_affiliations_joined for i in authors]
-    # author_info_coauthor_affiliations_n_grams = get_text_ngrams(
-    #     " ".join(affils), stopwords=AFFILIATIONS_STOP_WORDS, use_bigrams=True
-    # )
+
     paper = paper._replace(
         authors=authors,
         author_info_coauthor_n_grams=author_info_coauthor_n_grams,
-        # author_info_coauthor_email_prefix_n_grams=author_info_coauthor_email_prefix_n_grams,
-        # author_info_coauthor_email_suffix_n_grams=author_info_coauthor_email_suffix_n_grams,
-        # author_info_coauthor_affiliations_n_grams=author_info_coauthor_affiliations_n_grams,
     )
 
     return (key, paper)

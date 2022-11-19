@@ -20,3 +20,4 @@ flake8==5.0.4
 black==22.10
 click==8.0.4
 mypy==0.991
+pydantic==1.10.2

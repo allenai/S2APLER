@@ -14,6 +14,7 @@ class TestClusterer(unittest.TestCase):
         self.dataset = PDData(
             "tests/test_dataset/papers.json",
             clusters="tests/test_dataset/clusters.json",
+            cluster_seeds="tests/test_dataset/cluster_seeds.json",
             name="test_dataset",
             balanced_pair_sample=False,
         )

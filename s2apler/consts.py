@@ -12,11 +12,20 @@ PROJECT_ROOT_PATH = os.path.abspath(os.path.join(package_dir, os.pardir))
 
 # load up the path_configs and check if they are set
 CONFIG_LOCATION = os.path.join(PROJECT_ROOT_PATH, "data", "path_config.json")
-with open(CONFIG_LOCATION) as _json_file:
-    CONFIG = json.load(_json_file)
 
-if CONFIG["main_data_dir"] == "absolute path of wherever you downloaded the data to":
-    logger.warning("You haven't set `main_data_dir` in data/path_config.json! Using data/ as default data directory.")
+try:
+    with open(CONFIG_LOCATION) as _json_file:
+        CONFIG = json.load(_json_file)
+
+    if CONFIG["main_data_dir"] == "absolute path of wherever you downloaded the data to":
+        logger.warning(
+            "You haven't set `main_data_dir` in data/path_config.json! Using data/ as default data directory."
+        )
+        CONFIG["main_data_dir"] = os.path.join(PROJECT_ROOT_PATH, "data")
+except:
+    # make the data directory
+    os.makedirs(os.path.join(PROJECT_ROOT_PATH, "data"), exist_ok=True)
+    CONFIG = {}
     CONFIG["main_data_dir"] = os.path.join(PROJECT_ROOT_PATH, "data")
 
 assert os.path.exists(CONFIG["main_data_dir"]), "The `main_data_dir` specified in data/path_config.json doesn't exist."
@@ -34,3 +43,4 @@ CLUSTER_SEEDS_LOOKUP = {"require": 0, "disallow": LARGE_DISTANCE}
 # this is the key for the orphan cluster, which are papers that do not
 # belong to any known cluster but may or may not cluster with each other
 ORPHAN_CLUSTER_KEY = "orphans"
+MODEL_VERSION = "0.1"

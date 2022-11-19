@@ -3,6 +3,13 @@ This repository provides access to the paper clustering dataset and production m
 
 The model will be live on semanticscholar.org.
 
+## TODO
+- Does `predict_incremental` work as we expect?
+- Should the constraints be turned off by default?
+- Do we need `altered_cluster_signatures`?
+- How do we test the constraints that eng will make?
+- Publish model with `tt`: https://github.com/allenai/timo/blob/main/docs/timo-tools/userguide.md
+
 ## Installation
 To install this package, run the following:
 
