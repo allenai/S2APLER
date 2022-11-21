@@ -437,7 +437,7 @@ class TestInterfaceIntegration(unittest.TestCase):
     def test__predictions(self, container):
         instances = [Instance(papers=PAPERS, cluster_seeds=CLUSTER_SEEDS)]
         predictions = container.predict_batch(instances)[0]
-        preds_sub = predictions["nondestructivetablethardnesstesting_2"]
+        preds_sub = predictions.prediction["nondestructivetablethardnesstesting_2"]
         self.assertEqual(set(preds_sub), {"1591643905", "2459452638", "2468186458"})
 
 

@@ -135,9 +135,10 @@ class Predictor:
             n_jobs=self._config.n_jobs,
         )
         if self._config.predict_incremental:
-            return self.clusterer.predict_incremental(dataset.papers, dataset)
+            out = self.clusterer.predict_incremental(dataset.papers, dataset)
         else:
-            return self.clusterer.predict(dataset.get_blocks(), dataset)[0]
+            out = self.clusterer.predict(dataset.get_blocks(), dataset)[0]
+        return Prediction(prediction=out)
 
     def predict_batch(self, instances: List[Instance]) -> List[Prediction]:
         """
