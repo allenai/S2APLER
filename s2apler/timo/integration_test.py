@@ -30,10 +30,7 @@ def test_prediction(self, container):
 import logging
 import sys
 import unittest
-import json
-from os.path import join
-from s2apler.consts import PROJECT_ROOT_PATH
-from .interface import Instance, Prediction
+from .interface import Instance
 
 
 try:
@@ -41,10 +38,11 @@ try:
 except ImportError as e:
     logging.warning(
         """
-    This test can only be run by a TIMO test runner. No tests will run. 
+    This test can only be run by a TIMO test runner. No tests will run.
     You may need to add this file to your project's pytest exclusions.
     """
     )
+    print(e)
     sys.exit(0)
 
 
@@ -439,9 +437,8 @@ class TestInterfaceIntegration(unittest.TestCase):
     def test__predictions(self, container):
         instances = [Instance(papers=PAPERS, cluster_seeds=CLUSTER_SEEDS)]
         predictions = container.predict_batch(instances)[0]
-        preds_sub = [v for v in predictions if v["cluster_id"] == "nondestructivetablethardnesstesting_2"][0]
-
-        self.assertEqual(set(preds_sub["paper_ids"]), {"1591643905", "2459452638", "2468186458"})
+        preds_sub = predictions["nondestructivetablethardnesstesting_2"]
+        self.assertEqual(set(preds_sub), {"1591643905", "2459452638", "2468186458"})
 
 
 # instance = Instance(papers=PAPERS, cluster_seeds=CLUSTER_SEEDS)

@@ -22,8 +22,9 @@ try:
             "You haven't set `main_data_dir` in data/path_config.json! Using data/ as default data directory."
         )
         CONFIG["main_data_dir"] = os.path.join(PROJECT_ROOT_PATH, "data")
-except:
+except Exception as e:
     # make the data directory
+    print(f"Could not load config with eception {e}. Creating data directory.")
     os.makedirs(os.path.join(PROJECT_ROOT_PATH, "data"), exist_ok=True)
     CONFIG = {}
     CONFIG["main_data_dir"] = os.path.join(PROJECT_ROOT_PATH, "data")
@@ -43,4 +44,3 @@ CLUSTER_SEEDS_LOOKUP = {"require": 0, "disallow": LARGE_DISTANCE}
 # this is the key for the orphan cluster, which are papers that do not
 # belong to any known cluster but may or may not cluster with each other
 ORPHAN_CLUSTER_KEY = "orphans"
-MODEL_VERSION = "0.1"

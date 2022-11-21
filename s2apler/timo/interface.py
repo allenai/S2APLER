@@ -10,7 +10,6 @@ import pickle
 from os.path import join
 from typing import Optional, List, Dict, Union
 from pydantic import BaseModel, BaseSettings, Field
-from s2apler.consts import CONFIG, MODEL_VERSION
 from s2apler.data import PDData
 
 
@@ -64,7 +63,7 @@ class Prediction(BaseModel):
     https://pydantic-docs.helpmanual.io/
     """
 
-    prediction: List[Dict[str, Union[str, int, List[str]]]]
+    prediction: Dict[str, List[str]]
 
 
 class PredictorConfig(BaseSettings):
@@ -123,17 +122,6 @@ class Predictor:
         self.clusterer.use_default_constraints_as_supervision = self._config.use_default_constraints_as_supervision
         self.clusterer.dont_merge_cluster_seeds = self._config.dont_merge_cluster_seeds
 
-    def format_clusters(self, pred_clusters):
-        clusters = []
-        for cluster_id in pred_clusters.keys():
-            formatted_cluster = {
-                "cluster_id": cluster_id,
-                "paper_ids": pred_clusters[cluster_id],
-                "model_version": MODEL_VERSION,
-            }
-            clusters.append(formatted_cluster)
-        return clusters
-
     def predict_one(self, instance: Instance) -> Prediction:
         """
         Should produce a single Prediction for the provided Instance.
@@ -147,9 +135,9 @@ class Predictor:
             n_jobs=self._config.n_jobs,
         )
         if self._config.predict_incremental:
-            return self.format_clusters(self.clusterer.predict_incremental(dataset.papers, dataset))
+            return self.clusterer.predict_incremental(dataset.papers, dataset)
         else:
-            return self.format_clusters(self.clusterer.predict(dataset.get_blocks(), dataset)[0])
+            return self.clusterer.predict(dataset.get_blocks(), dataset)[0]
 
     def predict_batch(self, instances: List[Instance]) -> List[Prediction]:
         """
