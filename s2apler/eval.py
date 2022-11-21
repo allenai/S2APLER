@@ -206,15 +206,15 @@ def facet_eval(
     block_len_dict = {}
     blocks = dataset.get_blocks()
 
-    for block_key, paper_ids in blocks.items():
-        block_len_dict[block_key] = len(paper_ids)
+    for block_key, sourced_paper_ids in blocks.items():
+        block_len_dict[block_key] = len(sourced_paper_ids)
 
     # we need to know the length of each cluster
     assert dataset.clusters is not None
     cluster_len_dict = {}
     for cluster_id, cluster_dict in dataset.clusters.items():
         if not cluster_id.endswith(ORPHAN_CLUSTER_KEY):
-            cluster_len_dict[cluster_id] = len(cluster_dict["paper_ids"])
+            cluster_len_dict[cluster_id] = len(cluster_dict["sourced_paper_ids"])
 
     # Keep track of facet specific f-score performance
     author_num_f1 = defaultdict(list)
@@ -225,13 +225,13 @@ def facet_eval(
 
     paper_lookup = list()
 
-    for paper_id, (p, r, f1) in metrics_per_paper.items():
+    for sourced_paper_id, (p, r, f1) in metrics_per_paper.items():
 
         _paper_dict = dict()
 
-        cluster_id = dataset.paper_to_cluster_id[paper_id]
+        cluster_id = dataset.paper_to_cluster_id[sourced_paper_id]
         if not cluster_id.endswith(ORPHAN_CLUSTER_KEY):
-            paper = dataset.papers[str(paper_id)]
+            paper = dataset.papers[str(sourced_paper_id)]
 
             author_num_f1[len(paper.authors)].append(f1)
             year_f1[paper.year].append(f1)
@@ -248,7 +248,7 @@ def facet_eval(
             block_len_f1[block_len_dict[paper.block]].append(f1)
 
             _paper_dict["block size"] = block_len_dict[paper.block]
-            _paper_dict["paper_id"] = paper_id  # type: ignore
+            _paper_dict["sourced_paper_id"] = sourced_paper_id  # type: ignore
             _paper_dict["precision"] = p  # type: ignore
             _paper_dict["recall"] = r  # type: ignore
             _paper_dict["f1"] = f1  # type: ignore

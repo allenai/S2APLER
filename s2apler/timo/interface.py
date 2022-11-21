@@ -27,7 +27,7 @@ class Paper(BaseModel):
     venue: Optional[str] = Field(required=False)
     journal_name: Optional[str] = Field(required=False)
     year: Optional[int] = Field(required=False)
-    paper_id: str = Field(required=True, description="paper id from the paper sources table")
+    sourced_paper_id: str = Field(required=True, description="paper id from the paper sources table")
     corpus_paper_id: Optional[str] = Field(required=False, description="paper id *after* clustering")
     doi: Optional[str] = Field(required=False)
     pmid: Optional[str] = Field(required=False)

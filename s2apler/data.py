@@ -67,7 +67,7 @@ class Paper(NamedTuple):
     author_info_coauthor_email_suffix_n_grams: Optional[Counter]
     author_info_coauthor_affiliations_n_grams: Optional[Counter]
     year: Optional[int]
-    paper_id: int
+    sourced_paper_id: int
     corpus_paper_id: Optional[int]  # this is the id of the paper's current mapping in the corpus
     doi: Optional[str]
     pmid: Optional[str]
@@ -149,9 +149,9 @@ class PDData:
         self.papers = self.maybe_load_json(papers)
 
         # convert dictionary to namedtuples for memory reduction
-        for paper_id, paper in self.papers.items():
-            paper_id = str(paper_id)
-            self.papers[paper_id] = Paper(
+        for sourced_paper_id, paper in self.papers.items():
+            sourced_paper_id = str(sourced_paper_id)
+            self.papers[sourced_paper_id] = Paper(
                 title=paper.get("title", ""),
                 abstract=paper.get("abstract", None),
                 has_abstract=paper.get("abstract", None) not in {"", None},
@@ -184,7 +184,7 @@ class PDData:
                 author_info_coauthor_email_suffix_n_grams=None,
                 author_info_coauthor_affiliations_n_grams=None,
                 year=paper.get("year", None),
-                paper_id=paper_id,
+                sourced_paper_id=sourced_paper_id,
                 doi=paper.get("doi", None),
                 pmid=paper.get("pmid", None),
                 source=paper.get("source", None),
@@ -249,8 +249,8 @@ class PDData:
                 self.paper_to_cluster_id = {}
                 logger.info("making paper to cluster id")
                 for cluster_id, cluster_info in self.clusters.items():
-                    for paper_id in cluster_info["paper_ids"]:
-                        self.paper_to_cluster_id[str(paper_id)] = cluster_id
+                    for sourced_paper_id in cluster_info["sourced_paper_ids"]:
+                        self.paper_to_cluster_id[str(sourced_paper_id)] = cluster_id
                 logger.info("made paper to cluster id")
         elif self.mode == "inference":
             self.all_test_pairs_flag = True
@@ -429,12 +429,12 @@ class PDData:
         Dict: mapping from block id to list of papers in the block
         """
         block: Dict[str, List[str]] = {}
-        for paper_id, paper in self.papers.items():
+        for sourced_paper_id, paper in self.papers.items():
             block_id = paper.block
             if block_id not in block:
-                block[block_id] = [paper_id]
+                block[block_id] = [sourced_paper_id]
             else:
-                block[block_id].append(paper_id)
+                block[block_id].append(sourced_paper_id)
         return block
 
     def get_papers_to_block(self) -> Dict[str, str]:
@@ -450,12 +450,12 @@ class PDData:
         paper_to_block: Dict[str, str] = {}
         block_dict = self.get_blocks()
         for block_key, papers in block_dict.items():
-            for paper_id in papers:
-                if paper_id in paper_to_block:
+            for sourced_paper_id in papers:
+                if sourced_paper_id in paper_to_block:
                     raise ValueError(
-                        f"Paper {paper_id} is in multiple blocks: {paper_to_block[paper_id]} and {block_key}"
+                        f"Paper {sourced_paper_id} is in multiple blocks: {paper_to_block[sourced_paper_id]} and {block_key}"
                     )
-                paper_to_block[paper_id] = block_key
+                paper_to_block[sourced_paper_id] = block_key
         return paper_to_block
 
     def split_blocks_helper(
@@ -568,13 +568,13 @@ class PDData:
 
         elif self.unit_of_data_split == "time":
             paper_to_year = {}
-            for paper_id, paper in self.papers.items():
-                # paper_id should be kept as string, so it can be matched to papers.json
-                paper_id = str(paper.paper_id)
+            for sourced_paper_id, paper in self.papers.items():
+                # sourced_paper_id should be kept as string, so it can be matched to papers.json
+                sourced_paper_id = str(paper.sourced_paper_id)
                 if paper.year is None:
-                    paper_to_year[paper_id] = 0
+                    paper_to_year[sourced_paper_id] = 0
                 else:
-                    paper_to_year[paper_id] = paper.year
+                    paper_to_year[sourced_paper_id] = paper.year
 
             train_size = int(len(paper_to_year) * self.train_ratio)
             val_size = int(len(paper_to_year) * self.val_ratio)
@@ -782,9 +782,6 @@ class PDData:
         ----------
         sample_size: integer
             The desired sample size
-        paper_ids: list
-            List of paper ids from which pairs can be sampled from.
-            List must be provided if blocking is not used
         blocks: dict
             It has block ids as keys, and list of paper ids under each block as values.
             Must be provided when blocking is used
