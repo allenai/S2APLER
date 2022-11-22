@@ -36,6 +36,23 @@ To obtain the paper clustering dataset, run the following command after the pack
 
 Note that this software package comes with tools specifically designed to access and model the dataset.
 
+## Evaluation Performance
+The pairwise model has this performance on the test set: 
+
+`{'AUROC': 0.999, 'Average Precision': 0.999, 'F1': 0.987, 'Precision': 0.986, 'Recall': 0.988}`.
+
+The final clustering has this performance on the test set, with an epsilon of 0.7: 
+
+`{'Precision': 0.9989, 'Recall': 0.9983, 'B3 F1': 0.9986}`,
+
+which is about a 50\% error reduction compared to the previous S2 paper clustering algorithm: 
+
+`{'Precision': 0.9995, 'Recall': 0.9948, 'B3 F1': 0.9971}`. 
+
+Note that the we are effectively trading off some precision for substantially better recall. These numbers were obtained by running the code in `scripts/analyze_final_data.ipynb` with a default random seed to control the which blocks end up where.
+
+Note further that this comparison is not a "complete" one because it assumed that both the old and new algorithms started with the same blocking function, but the new paper clustering algorithm also has improved blocking.
+
 ## Configuration
 Modify the config file at `data/path_config.json`. This file should look like this
 ```
