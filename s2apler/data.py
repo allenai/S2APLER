@@ -923,10 +923,14 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
 
     title = normalize_text(paper.title)
     abstract = normalize_text(paper.abstract)
+    if paper.title is None:
+        title_lower_simple = ""
+    else:
+        title_lower_simple = paper.title.lower().replace(" ", "")
     paper = paper._replace(
         title=title,
         # title_ngrams_words=title_ngrams_words = get_text_ngrams_words(title, stopwords=None),
-        title_ngrams_chars=get_text_ngrams(paper.title.lower().replace(" ", ""), stopwords=None, use_bigrams=False),
+        title_ngrams_chars=get_text_ngrams(title_lower_simple, stopwords=None, use_bigrams=False),
         abstract_ngrams_words=get_text_ngrams_words(abstract, stopwords=None),
     )
     venue = normalize_venue_name(paper.venue)
