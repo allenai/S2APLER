@@ -528,7 +528,7 @@ class Clusterer:
                 labels = [0]
 
             for signature, label in zip(block_dict[block_key], labels):
-                pred_clusters[block_key + "_" + str(label)].append(signature)
+                pred_clusters[str(block_key) + "_" + str(label)].append(signature)
 
         return dict(pred_clusters), dists
 
