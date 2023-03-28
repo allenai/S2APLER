@@ -453,7 +453,8 @@ class PDData:
             for sourced_paper_id in papers:
                 if sourced_paper_id in paper_to_block:
                     raise ValueError(
-                        f"Paper {sourced_paper_id} is in multiple blocks: {paper_to_block[sourced_paper_id]} and {block_key}"
+                        f"Paper {sourced_paper_id} is in \
+                            multiple blocks: {paper_to_block[sourced_paper_id]} and {block_key}"
                     )
                 paper_to_block[sourced_paper_id] = block_key
         return paper_to_block
