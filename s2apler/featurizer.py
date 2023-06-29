@@ -249,9 +249,7 @@ def compare_author_first_letters(auth_1, auth_2, check_same_len=True, strict_ord
 
     Args:
         auth_1 (list of Authors): list of authors
-            must have keys "author_info_first_normalized_without_apostrophe" (str) and
-            "author_info_last_normalized" (str).
-            assuming the author list is already sorted in order of position and normalized and lower-cased
+            must have key "author_info_first_letters" (str)
         auth_2 (list of Authors): ditto
         check_same_len (bool, optional): whether to check if the two author lists have the same len
         strict_order (bool, optional): whether the authors have to be in the same order or not.
@@ -546,7 +544,7 @@ def many_pairs_featurize(
             with multiprocessing.Pool(processes=n_jobs if len(pieces_of_work) > 1000 else 1) as p:
                 _max = len(pieces_of_work)
                 with tqdm(total=_max, desc="Doing work", disable=_max <= 10000) as pbar:
-                    for (feature_output, index) in p.imap(
+                    for feature_output, index in p.imap(
                         functools.partial(parallel_helper, worker_func=_single_pair_featurize),
                         pieces_of_work,
                         min(chunk_size, max(1, int((_max / n_jobs) / 2))),
