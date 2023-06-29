@@ -44,8 +44,6 @@ class Author(NamedTuple):
     author_info_last: str
     author_info_suffix_normalized: Optional[str]
     author_info_suffix: str
-    author_info_first_normalized: Optional[str]
-    author_info_middle_normalized: Optional[str]
     author_info_full_name: Optional[str]
     author_info_first_letters: Optional[set]
 
@@ -144,7 +142,6 @@ class PDData:
         random_seed: int = 1111,
         n_jobs: int = 1,
     ):
-
         logger.info("loading papers")
         self.papers = self.maybe_load_json(papers)
 
@@ -168,8 +165,6 @@ class PDData:
                         author_info_last=author.get("last", None),
                         author_info_suffix_normalized=None,
                         author_info_suffix=author.get("suffix", None),
-                        author_info_first_normalized=None,
-                        author_info_middle_normalized=None,
                         author_info_full_name=None,
                         author_info_first_letters=None,
                     )
@@ -865,6 +860,8 @@ def get_full_name_for_features(author: Author, include_last: bool = True, includ
 def preprocess_authors(author):
     """
     Preprocess the authors, doing lots of normalization and feature creation
+    TODO: fix here as described in https://github.com/allenai/S2AND/issues/39
+    TODO: middle="Le", last="Merdy" vs middle = "" last = "Le Merdy"
     """
 
     # our normalization scheme is to normalize first and middle separately,
@@ -873,20 +870,20 @@ def preprocess_authors(author):
     first_normalized_without_apostrophe = normalize_text(author.author_info_first or "", special_case_apostrophes=True)
 
     middle_normalized = normalize_text(author.author_info_middle or "")
+    # TODO? where is middle_normalized_without_apostrophe
     first_middle_normalized_split = (first_normalized + " " + middle_normalized).split(" ")
     if first_middle_normalized_split[0] in NAME_PREFIXES:
         first_middle_normalized_split = first_middle_normalized_split[1:]
     first_middle_normalized_split_without_apostrophe = (
         first_normalized_without_apostrophe + " " + middle_normalized
     ).split(" ")
+    # what happens if there is only one element and we remove it?
     if first_middle_normalized_split_without_apostrophe[0] in NAME_PREFIXES:
         first_middle_normalized_split_without_apostrophe = first_middle_normalized_split_without_apostrophe[1:]
     author_info_last_normalized = normalize_text(author.author_info_last or "")
 
     author = author._replace(
-        author_info_first_normalized=first_middle_normalized_split[0],
         author_info_first_normalized_without_apostrophe=first_middle_normalized_split_without_apostrophe[0],
-        author_info_middle_normalized=" ".join(first_middle_normalized_split[1:]),
         author_info_middle_normalized_without_apostrophe=" ".join(first_middle_normalized_split_without_apostrophe[1:]),
         author_info_last_normalized=author_info_last_normalized,
         author_info_suffix_normalized=normalize_text(author.author_info_suffix or ""),
@@ -930,7 +927,7 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         title_lower_simple = paper.title.lower().replace(" ", "")
     paper = paper._replace(
         title=title,
-        # title_ngrams_words=title_ngrams_words = get_text_ngrams_words(title, stopwords=None),
+        # title_ngrams_words=get_text_ngrams_words(title, stopwords=None),
         title_ngrams_chars=get_text_ngrams(title_lower_simple, stopwords=None, use_bigrams=False),
         abstract_ngrams_words=get_text_ngrams_words(abstract, stopwords=None),
     )

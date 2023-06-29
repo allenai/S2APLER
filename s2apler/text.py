@@ -12,11 +12,13 @@ import pandas as pd
 from numpy import inner
 from numpy.linalg import norm
 from collections import Counter
-
+from pylatexenc.latex2text import LatexNodes2Text
 from text_unidecode import unidecode
 import jellyfish
 
 from s2apler.consts import NUMPY_NAN
+
+latex_to_text = LatexNodes2Text().latex_to_text
 
 dashes = [
     "\\u002D",
@@ -462,6 +464,10 @@ def normalize_text(text: Optional[str], special_case_apostrophes: bool = False) 
     if text is None or len(text) == 0:
         return ""
 
+    # if there is the possibility of latex
+    # we can convert it to text
+    if "\\" in text or text.count("$") > 1:
+        text = latex_to_text(text)
     norm_text = unidecode(text).lower()
 
     if special_case_apostrophes:
