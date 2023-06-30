@@ -538,31 +538,32 @@ class Clusterer:
                 for i, loc in enumerate(negative_one_label_locations):
                     labels[loc] = max_label + 1 + i
 
-                # at this point it is possible that clusters that have overlapping
-                # dois, pdf_hashes or pmids are STILL not joined together
-                # due to the 0 enforced distance not being enough to outweigh
-                # a lot of large distances. so we manually go through the clusters
-                # find which ones overlap according to ANY of the ids, and join them
-                inverse_id_map = defaultdict(list)
-                for paper_id, label in zip(block_dict[block_key], labels):
-                    if dataset.papers[paper_id].doi is not None:
-                        inverse_id_map[dataset.papers[paper_id].doi].append(label)
-                    if dataset.papers[paper_id].pdf_hash is not None:
-                        inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
-                    if dataset.papers[paper_id].pmid is not None:
-                        inverse_id_map[dataset.papers[paper_id].pmid].append(label)
+                if self.use_default_constraints_as_supervision:
+                    # at this point it is possible that clusters that have overlapping
+                    # dois, pdf_hashes or pmids are STILL not joined together
+                    # due to the 0 enforced distance not being enough to outweigh
+                    # a lot of large distances. so we manually go through the clusters
+                    # find which ones overlap according to ANY of the ids, and join them
+                    inverse_id_map = defaultdict(list)
+                    for paper_id, label in zip(block_dict[block_key], labels):
+                        if dataset.papers[paper_id].doi is not None:
+                            inverse_id_map[dataset.papers[paper_id].doi].append(label)
+                        if dataset.papers[paper_id].pdf_hash is not None:
+                            inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
+                        if dataset.papers[paper_id].pmid is not None:
+                            inverse_id_map[dataset.papers[paper_id].pmid].append(label)
 
-                # now join any clusters that have overlapping ids
-                # this is a tad tricky because as we merge clusters, we need to
-                # keep track of where they are going
-                to_join_sets = [sorted(val) for val in inverse_id_map.values() if len(val) > 1]
-                mapped_labels = {label: label for label in labels}
-                labels = np.array(labels)
-                for join_set in to_join_sets:
-                    for other_label in join_set[1:]:
-                        labels[labels == mapped_labels[other_label]] = mapped_labels[join_set[0]]
-                        mapped_labels[other_label] = mapped_labels[join_set[0]]
-                labels = list(labels)
+                    # now join any clusters that have overlapping ids
+                    # this is a tad tricky because as we merge clusters, we need to
+                    # keep track of where they are going
+                    to_join_sets = [sorted(val) for val in inverse_id_map.values() if len(val) > 1]
+                    mapped_labels = {label: label for label in labels}
+                    labels = np.array(labels)
+                    for join_set in to_join_sets:
+                        for other_label in join_set[1:]:
+                            labels[labels == mapped_labels[other_label]] = mapped_labels[join_set[0]]
+                            mapped_labels[other_label] = mapped_labels[join_set[0]]
+                    labels = list(labels)
             else:
                 labels = [0]
 
