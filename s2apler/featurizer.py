@@ -33,13 +33,6 @@ TupleOfArrays = Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]
 
 CACHED_FEATURES: Dict[str, Dict[str, Any]] = {}
 
-PDF_SOURCES = {
-    "MergedPDFExtraction",
-    "ScienceParseMerged",
-    "ScienceParsePlus",
-    "Grobid",
-}
-
 SEPARATE_SOURCES = {
     # "Unpaywall",
     # "Crossref",
