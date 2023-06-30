@@ -446,7 +446,7 @@ TEXT_FUNCTIONS = [
 ]
 
 
-def normalize_text(text: Optional[str], special_case_apostrophes: bool = False) -> str:
+def normalize_text(text: Optional[str], special_case_apostrophes_and_dashes: bool = False) -> str:
     """
     Normalize text.
 
@@ -470,8 +470,9 @@ def normalize_text(text: Optional[str], special_case_apostrophes: bool = False) 
         text = latex_to_text(text)
     norm_text = unidecode(text).lower()
 
-    if special_case_apostrophes:
+    if special_case_apostrophes_and_dashes:
         norm_text = norm_text.replace("'", "")
+        norm_text = RE_DASHES.sub("", norm_text)
 
     norm_text = RE_NORMALIZE_WHOLE_NAME.sub(" ", norm_text)
     norm_text = RE_SPACES.sub(" ", norm_text).strip()

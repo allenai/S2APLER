@@ -132,9 +132,9 @@ class Clusterer:
         # and we can only keep as many as is specified
         out_dict = {}
         count = 0
-        for block_key, signatures in block_dict.items():
-            if len(signatures) > 1:
-                out_dict[block_key] = signatures
+        for block_key, paper_ids in block_dict.items():
+            if len(paper_ids) > 1:
+                out_dict[block_key] = paper_ids
                 count += 1
                 # early stopping if we have enough
                 if num_to_keep is not None and count == num_to_keep:
@@ -221,8 +221,8 @@ class Clusterer:
         # initialize pairwise_probas with correctly size arrays
         pairwise_probas = {}
         num_pairs = 0
-        for block_key, signatures in block_dict.items():
-            block_size = len(signatures)
+        for block_key, paper_ids in block_dict.items():
+            block_size = len(paper_ids)
             num_pairs += int(block_size * (block_size - 1) / 2)
             if isinstance(self.cluster_model, FastCluster):
                 # flattened pdist style
@@ -365,12 +365,12 @@ class Clusterer:
         for dataset in datasets:
             # blocks
             train_block_dict, val_block_dict, _ = dataset.split_cluster_papers()
-            # incremental setting uses all the signatures in train and val
+            # incremental setting uses all the paper_ids in train and val
             # block-wise split uses only validation set for building the clustering model
             if dataset.unit_of_data_split == "time" or dataset.unit_of_data_split == "papers":
-                for block_key, signatures in train_block_dict.items():
+                for block_key, paper_ids in train_block_dict.items():
                     if block_key in val_block_dict:
-                        val_block_dict[block_key].extend(signatures)
+                        val_block_dict[block_key].extend(paper_ids)
 
             # we don't need val blocks with only a single element
             val_block_dict = self.filter_blocks(val_block_dict, self.val_blocks_size)
@@ -387,7 +387,7 @@ class Clusterer:
                 val_dists = val_dists_precomputed[dataset.name]
             val_dists_list.append(val_dists)
 
-            # weights for weighted F1 average: total # of signatures in dataset
+            # weights for weighted F1 average: total # of paper_ids in dataset
             weights.append(np.sum([len(i) for i in val_block_dict.values()]))
 
         def obj(params):
@@ -501,6 +501,19 @@ class Clusterer:
 
             return dict(pred_clusters), dists
 
+        # we need to remove all the null titles from the block_dict and then reattach them later
+        block_dict_no_null_titles = defaultdict(list)
+        block_dict_null_titles = defaultdict(list)
+        for block_key, paper_ids in block_dict.items():
+            for paper_id in paper_ids:
+                title = dataset.papers[paper_id].title
+                if title is None or len(title) == 0:
+                    block_dict_null_titles[block_key].append(paper_id)
+                else:
+                    block_dict_no_null_titles[block_key].append(paper_id)
+        block_dict = dict(block_dict_no_null_titles)
+        block_dict_no_null_titles = dict(block_dict_null_titles)
+
         if dists is None:
             dists = self.make_distance_matrices(
                 block_dict,
@@ -531,13 +544,13 @@ class Clusterer:
                 # a lot of large distances. so we manually go through the clusters
                 # find which ones overlap according to ANY of the ids, and join them
                 inverse_id_map = defaultdict(list)
-                for signature, label in zip(block_dict[block_key], labels):
-                    if dataset.papers[signature].doi is not None:
-                        inverse_id_map[dataset.papers[signature].doi].append(label)
-                    if dataset.papers[signature].pdf_hash is not None:
-                        inverse_id_map[dataset.papers[signature].pdf_hash].append(label)
-                    if dataset.papers[signature].pmid is not None:
-                        inverse_id_map[dataset.papers[signature].pmid].append(label)
+                for paper_id, label in zip(block_dict[block_key], labels):
+                    if dataset.papers[paper_id].doi is not None:
+                        inverse_id_map[dataset.papers[paper_id].doi].append(label)
+                    if dataset.papers[paper_id].pdf_hash is not None:
+                        inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
+                    if dataset.papers[paper_id].pmid is not None:
+                        inverse_id_map[dataset.papers[paper_id].pmid].append(label)
 
                 # now join any clusters that have overlapping ids
                 # this is a tad tricky because as we merge clusters, we need to
@@ -553,8 +566,45 @@ class Clusterer:
             else:
                 labels = [0]
 
-            for signature, label in zip(block_dict[block_key], labels):
-                pred_clusters[str(block_key) + "_" + str(label)].append(signature)
+            # now we can rejoin the null titles based only on the ids
+            paper_ids_for_nulls = block_dict_no_null_titles.get(block_key, [])
+            if len(paper_ids_for_nulls) > 0:
+                # first we compute a map from various ids to the labels
+                # have to do this again because we reassigned labels above
+                # when joining clusters based on IDs
+                inverse_id_map = defaultdict(list)
+                for paper_id, label in zip(block_dict[block_key], labels):
+                    if dataset.papers[paper_id].doi is not None:
+                        inverse_id_map[dataset.papers[paper_id].doi].append(label)
+                    if dataset.papers[paper_id].pdf_hash is not None:
+                        inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
+                    if dataset.papers[paper_id].pmid is not None:
+                        inverse_id_map[dataset.papers[paper_id].pmid].append(label)
+
+                labels_for_nulls = []
+                for paper_id in paper_ids_for_nulls:
+                    # look up each of the ids of the null title papers in the inverse_id_map
+                    # and assign them the label of the first one we find
+                    doi = dataset.papers[paper_id].doi
+                    pmid = dataset.papers[paper_id].pmid
+                    pdf_hash = dataset.papers[paper_id].pdf_hash
+                    if doi is not None and doi in inverse_id_map:
+                        labels_for_nulls.append(inverse_id_map[doi][0])
+                    elif pmid is not None and pmid in inverse_id_map:
+                        labels_for_nulls.append(inverse_id_map[pmid][0])
+                    elif pdf_hash is not None and pdf_hash in inverse_id_map:
+                        labels_for_nulls.append(inverse_id_map[pdf_hash][0])
+                    else:
+                        max_label += 1
+                        labels_for_nulls.apppend(max_label)
+
+                paper_ids_for_block = block_dict[block_key] + paper_ids_for_nulls
+                labels = labels + labels_for_nulls
+            else:
+                paper_ids_for_block = block_dict[block_key]
+
+            for paper_id, label in zip(paper_ids_for_block, labels):
+                pred_clusters[str(block_key) + "_" + str(label)].append(paper_id)
 
         return dict(pred_clusters), dists
 
@@ -562,8 +612,8 @@ class Clusterer:
         """
         Predict clustering in incremental mode. This assumes that the majority of the labels are passed
         in using the cluster_seeds parameter of the dataset class, and skips work by simply assigning each
-        unassigned signature to the closest cluster if distance is less than eps, and then separately cluster all
-        the unassigned signatures that are not within eps of any existing cluster.
+        unassigned paper to the closest cluster if distance is less than eps, and then separately cluster all
+        the unassigned papers that are not within eps of any existing cluster.
 
         Corrected, claimed profiles should be noted via the altered_cluster_papers parameter (in PDData).
         Then predict_incremental performs a pre-clustering step on each altered cluster to determine how
@@ -571,7 +621,7 @@ class Clusterer:
         then reassembled to restore the complete claimed profile when S2APLER returns results.
 
         Currently this would be useful in the following situation. We have a massive block, for which we want
-        to cluster a small number of new signatures into (block size * number of new signatures should be less
+        to cluster a small number of new papers into (block size * number of new papers should be less
         than the normal batch size).
 
         Note: this function was designed to work on a single block at a time.
@@ -579,7 +629,7 @@ class Clusterer:
         Parameters
         ----------
         block_papers: List[str]
-            the signatures in the block to predict from
+            the paper_ids in the block to predict from
         dataset: PDData
             the dataset
 
@@ -624,17 +674,17 @@ class Clusterer:
             if possibly_unassigned_paper in cluster_seeds_require:
                 continue
             unassigned_paper = possibly_unassigned_paper
-            for signature in cluster_seeds_require.keys():
+            for paper_id in cluster_seeds_require.keys():
                 label = np.nan
                 if self.use_default_constraints_as_supervision:
                     value = dataset.get_constraint(
                         unassigned_paper,
-                        signature,
+                        paper_id,
                         dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
                     )
                     if value is not None:
                         label = value - LARGE_INTEGER
-                all_pairs.append((unassigned_paper, signature, label))
+                all_pairs.append((unassigned_paper, paper_id, label))
 
         batch_features, _, batch_nameless_features = many_pairs_featurize(
             all_pairs,
@@ -669,7 +719,7 @@ class Clusterer:
         if np.any(not_predict_flag):
             batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
-        logger.info("Computing average distances for unassigned signatures")
+        logger.info("Computing average distances for unassigned papers")
         papers_to_cluster_to_average_dist: Dict[str, Dict[int, Tuple[float, int]]] = defaultdict(
             lambda: defaultdict(lambda: (0, 0))
         )
@@ -684,7 +734,7 @@ class Clusterer:
                 previous_count + 1,
             )
 
-        logger.info("Assigning unassigned signatures")
+        logger.info("Assigning unassigned papers")
         pred_clusters = defaultdict(list)
         singleton_papers = []
         for papers_id, cluster_id in dataset.cluster_seeds_require.items():

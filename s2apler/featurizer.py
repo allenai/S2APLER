@@ -33,10 +33,20 @@ TupleOfArrays = Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]
 
 CACHED_FEATURES: Dict[str, Dict[str, Any]] = {}
 
+PDF_SOURCES = {
+    "MergedPDFExtraction",
+    "ScienceParseMerged",
+    "ScienceParsePlus",
+    "Grobid",
+}
+
 SEPARATE_SOURCES = {
     # "Unpaywall",
-    "MergedPDFExtraction",
     # "Crossref",
+    "MergedPDFExtraction",
+    # "ScienceParseMerged",
+    # "ScienceParsePlus",
+    # "Grobid",
 }
 
 
@@ -271,7 +281,12 @@ def compare_author_first_letters(auth_1, auth_2, check_same_len=True, strict_ord
     # check if the first letters are the same
     if strict_order:
         for i in range(len(first_letters_1)):
-            if first_letters_1[i] != first_letters_2[i]:
+            # comes back as true for {S, P, T} and {S, T}
+            # and also for {S, T} and {S}
+            # but false for {S, P, T} and {S, K, L}
+            # min is 2 if 2 are available for first/last name
+            min_size = min(2, min(len(first_letters_1[i]), len(first_letters_2[i])))
+            if len(first_letters_1[i].intersection(first_letters_2[i])) < min_size:
                 return False
         return True
     else:
@@ -415,10 +430,11 @@ def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tupl
     )
 
     source_counts = [int(paper_1.source == i) + int(paper_2.source == i) for i in SEPARATE_SOURCES]
-    features.extend(
-        source_counts + [int(paper_1.source in PUBLISHER_SOURCES) + int(paper_2.source in PUBLISHER_SOURCES)]
-    )
-    features.append(int(paper_1.source == paper_2.source) if sum(source_counts) == 0 else np.nan)
+    # how many are from trusted publishers?
+    publisher_source_counts = int(paper_1.source in PUBLISHER_SOURCES) + int(paper_2.source in PUBLISHER_SOURCES)
+    # if both are from trusted publishers, are they the same or different?
+    same_publisher_sources = int(paper_1.source == paper_2.source) if publisher_source_counts == 2 else np.nan
+    features.extend(source_counts + [publisher_source_counts, same_publisher_sources])
 
     # unifying feature type in features array
     features = [float(val) if type(val) in [np.float32, np.float64, float] else int(val) for val in features]
