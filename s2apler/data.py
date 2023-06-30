@@ -157,14 +157,15 @@ class PDData:
                 abstract_ngrams_words=None,
                 authors=[
                     Author(
-                        author_info_first=author.get("first", None),
+                        author_info_first=author.get("first", None) or author.get("author_info_first", None),
                         author_info_first_normalized_without_apostrophe=None,
-                        author_info_middle=" ".join(author.get("middle", [])),
+                        author_info_middle=" ".join(author.get("middle", []))
+                        + " ".join(author.get("author_info_middle", []) or []),
                         author_info_middle_normalized_without_apostrophe=None,
                         author_info_last_normalized=None,
-                        author_info_last=author.get("last", None),
+                        author_info_last=author.get("last", None) or author.get("author_info_last", None),
                         author_info_suffix_normalized=None,
-                        author_info_suffix=author.get("suffix", None),
+                        author_info_suffix=author.get("suffix", None) or author.get("author_info_suffix", None),
                         author_info_full_name=None,
                         author_info_first_letters=None,
                     )
@@ -950,10 +951,12 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         use_unigrams=True,
         use_bigrams=True,
     )
+    doi = paper.doi.lower() if paper.doi is not None else None
 
     paper = paper._replace(
         authors=authors,
         author_info_coauthor_n_grams=author_info_coauthor_n_grams,
+        doi=doi,
     )
 
     return (key, paper)
