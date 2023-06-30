@@ -88,6 +88,11 @@ class PredictorConfig(BaseSettings):
         description="Controls whether to use cluster seeds to enforce 'dont merge' as well as 'must merge' constraints",
         required=False,
     )
+    eps: float = Field(
+        default=None,
+        description="epsilon for the clusterer. If None, will use what comes with the model",
+        required=False,
+    )
 
 
 class Predictor:
@@ -119,6 +124,8 @@ class Predictor:
         """
         with open(join(self._artifacts_dir, "prod_model.pickle"), "rb") as f:
             self.clusterer = pickle.load(f)["clusterer"]
+        if self._config.eps is not None:
+            self.clusterer.set_params({"eps": self._config.eps})
         self.clusterer.use_default_constraints_as_supervision = self._config.use_default_constraints_as_supervision
         self.clusterer.dont_merge_cluster_seeds = self._config.dont_merge_cluster_seeds
 
