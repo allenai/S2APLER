@@ -33,14 +33,7 @@ TupleOfArrays = Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]
 
 CACHED_FEATURES: Dict[str, Dict[str, Any]] = {}
 
-SEPARATE_SOURCES = {
-    # "Unpaywall",
-    # "Crossref",
-    "MergedPDFExtraction",
-    # "ScienceParseMerged",
-    # "ScienceParsePlus",
-    # "Grobid",
-}
+PDF_SOURCES = {"MergedPDFExtraction", "ScienceParseMerged", "ScienceParsePlus", "Grobid"}
 
 
 class FeaturizationInfo:
@@ -155,8 +148,7 @@ class FeaturizationInfo:
 
         if "paper_quality" in self.features_to_use:
             these_features = [f"paper_field_count_{i}" for i in ["abstract", "authors", "venue"]]  # 'year'
-            these_features.extend(["source_count_" + i for i in SEPARATE_SOURCES])
-            these_features.extend(["source_count_publisher", "sources_are_same"])
+            these_features.extend(["source_count_pdf", "source_count_publisher", "sources_publisher_are_same"])
             feature_names.extend(these_features)
             lightgbm_monotone_constraints.extend(["0"] * len(these_features))
             self.indices_to_use.extend(list(range(start_count, start_count + len(these_features))))
@@ -422,12 +414,13 @@ def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tupl
         ]
     )
 
-    source_counts = [int(paper_1.source == i) + int(paper_2.source == i) for i in SEPARATE_SOURCES]
+    # how many are from PDFs?
+    source_counts_pdf = int(paper_1.source in PDF_SOURCES) + int(paper_2.source in PDF_SOURCES)
     # how many are from trusted publishers?
     publisher_source_counts = int(paper_1.source in PUBLISHER_SOURCES) + int(paper_2.source in PUBLISHER_SOURCES)
-    # if both are from trusted publishers, are they the same or different?
+    # if both are from trusted publishers, are they the same publisher or different?
     same_publisher_sources = int(paper_1.source == paper_2.source) if publisher_source_counts == 2 else np.nan
-    features.extend(source_counts + [publisher_source_counts, same_publisher_sources])
+    features.extend([source_counts_pdf, publisher_source_counts, same_publisher_sources])
 
     # unifying feature type in features array
     features = [float(val) if type(val) in [np.float32, np.float64, float] else int(val) for val in features]
