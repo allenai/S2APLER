@@ -426,17 +426,22 @@ def special_publication_word_similarity(s1, s2):
         return s1_special_overlap == s2_special_overlap
 
 
-def prefix_dist(string_1: str, string_2: str) -> float:
-    if string_1 is None or pd.isnull(string_1) or string_2 is None or pd.isnull(string_2):
-        return NUMPY_NAN
-    if string_1 == string_2:
-        return 0.0
-    min_word, max_word = (string_1, string_2) if len(string_1) < len(string_2) else (string_2, string_1)
+def prefix_dist_helper(min_word: str, max_word: str) -> float:
     min_len = len(min_word)
     for i in range(min_len, 0, -1):
         if min_word[:i] == max_word[:i]:
             return 1 - (i / min_len)
     return 1.0
+
+
+def prefix_dist(string_1: str, string_2: str) -> float:
+    if string_1 is None or pd.isnull(string_1) or string_2 is None or pd.isnull(string_2):
+        return NUMPY_NAN
+    if string_1 == string_2:
+        return 0.0
+    # sometimes there is a small diff in the first
+    min_word, max_word = (string_1, string_2) if len(string_1) < len(string_2) else (string_2, string_1)
+    return min(prefix_dist_helper(min_word, max_word), prefix_dist_helper(min_word[::-1], max_word[::-1]))
 
 
 TEXT_FUNCTIONS = [
@@ -446,7 +451,7 @@ TEXT_FUNCTIONS = [
 ]
 
 
-def normalize_text(text: Optional[str], special_case_apostrophes: bool = False) -> str:
+def normalize_text(text: Optional[str], special_case_apostrophes_and_dashes: bool = False) -> str:
     """
     Normalize text.
 
@@ -470,8 +475,9 @@ def normalize_text(text: Optional[str], special_case_apostrophes: bool = False) 
         text = latex_to_text(text)
     norm_text = unidecode(text).lower()
 
-    if special_case_apostrophes:
+    if special_case_apostrophes_and_dashes:
         norm_text = norm_text.replace("'", "")
+        norm_text = RE_DASHES.sub("", norm_text)
 
     norm_text = RE_NORMALIZE_WHOLE_NAME.sub(" ", norm_text)
     norm_text = RE_SPACES.sub(" ", norm_text).strip()

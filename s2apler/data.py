@@ -159,8 +159,10 @@ class PDData:
                     Author(
                         author_info_first=author.get("first", None) or author.get("author_info_first", None),
                         author_info_first_normalized_without_apostrophe=None,
-                        author_info_middle=" ".join(author.get("middle", []))
-                        + " ".join(author.get("author_info_middle", []) or []),
+                        author_info_middle=" ".join(
+                            author.get("middle", [])
+                            + [i for i in [author.get("author_info_middle", None)] if i is not None]
+                        ),
                         author_info_middle_normalized_without_apostrophe=None,
                         author_info_last_normalized=None,
                         author_info_last=author.get("last", None) or author.get("author_info_last", None),
@@ -867,34 +869,31 @@ def preprocess_authors(author):
 
     # our normalization scheme is to normalize first and middle separately,
     # join them, then take the first token of the combined join
-    first_normalized = normalize_text(author.author_info_first or "")
-    first_normalized_without_apostrophe = normalize_text(author.author_info_first or "", special_case_apostrophes=True)
+    first_normed = normalize_text(author.author_info_first or "", special_case_apostrophes_and_dashes=True)
+    middle_normed = normalize_text(author.author_info_middle or "", special_case_apostrophes_and_dashes=True)
+    last_normed = normalize_text(author.author_info_last or "", special_case_apostrophes_and_dashes=True)
+    suffix_normed = normalize_text(author.author_info_suffix or "", special_case_apostrophes_and_dashes=True)
 
-    middle_normalized = normalize_text(author.author_info_middle or "")
-    # TODO? where is middle_normalized_without_apostrophe
-    first_middle_normalized_split = (first_normalized + " " + middle_normalized).split(" ")
-    if first_middle_normalized_split[0] in NAME_PREFIXES:
-        first_middle_normalized_split = first_middle_normalized_split[1:]
-    first_middle_normalized_split_without_apostrophe = (
-        first_normalized_without_apostrophe + " " + middle_normalized
-    ).split(" ")
-    # what happens if there is only one element and we remove it?
-    if first_middle_normalized_split_without_apostrophe[0] in NAME_PREFIXES:
-        first_middle_normalized_split_without_apostrophe = first_middle_normalized_split_without_apostrophe[1:]
-    author_info_last_normalized = normalize_text(author.author_info_last or "")
+    first_middle_normed = (first_normed + " " + middle_normed).split(" ")
+
+    if first_middle_normed[0] in NAME_PREFIXES and len(first_middle_normed) > 1:
+        first_middle_normed = first_middle_normed[1:]
 
     author = author._replace(
-        author_info_first_normalized_without_apostrophe=first_middle_normalized_split_without_apostrophe[0],
-        author_info_middle_normalized_without_apostrophe=" ".join(first_middle_normalized_split_without_apostrophe[1:]),
-        author_info_last_normalized=author_info_last_normalized,
-        author_info_suffix_normalized=normalize_text(author.author_info_suffix or ""),
+        author_info_first_normalized_without_apostrophe=first_middle_normed[0],
+        author_info_middle_normalized_without_apostrophe=" ".join(first_middle_normed[1:]),
+        author_info_last_normalized=last_normed,
+        author_info_suffix_normalized=suffix_normed,
     )
 
     author_info_first_letters = set()
-    if len(first_normalized_without_apostrophe) > 0:
-        author_info_first_letters.add(first_normalized_without_apostrophe[0])
-    if len(author_info_last_normalized) > 0:
-        author_info_first_letters.add(author_info_last_normalized[0])
+    if len(first_normed) > 0:
+        author_info_first_letters.add(first_normed[0])
+    if len(first_normed[1:]) > 0:
+        for i in first_normed[1:]:
+            author_info_first_letters.add(i[0])
+    if len(last_normed) > 0:
+        author_info_first_letters.add(last_normed[0])
 
     author = author._replace(
         author_info_full_name=get_full_name_for_features(author).strip(),

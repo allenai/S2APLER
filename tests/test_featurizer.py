@@ -80,7 +80,7 @@ class TestData(unittest.TestCase):
             1.0,
             0.0,
             0.0,
-            1.0,
+            -1.0,
         ]
         expected_features_2 = [
             -1.0,
@@ -100,10 +100,10 @@ class TestData(unittest.TestCase):
             2.0,
             0.0,
             0.0,
-            1.0,
+            -1.0,
         ]
         expected_features_3 = [
-            0.06319702416658401,
+            0.06296296296296296,
             0.0,
             -1.0,
             0.0,
@@ -120,7 +120,7 @@ class TestData(unittest.TestCase):
             1.0,
             0.0,
             0.0,
-            1.0,
+            -1.0,
         ]
         self.check_features_array_equal(list(features[0, :]), expected_features_1)
         self.check_features_array_equal(list(features[1, :]), expected_features_2)

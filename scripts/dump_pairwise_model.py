@@ -21,7 +21,7 @@ from s2apler.consts import PROJECT_ROOT_PATH
 
 
 N_ITER = 25  # for the hyperopt
-EPS = 0.7  # see comments below where clusterer is defined
+EPS = 0.5  # see comments below where clusterer is defined
 
 # which features to use (all of them)
 features_to_use = [
@@ -103,6 +103,19 @@ Us (per EPS):
 0.75 (0.99862, 0.99860, 0.99861)
 0.80 (0.99809, 0.99876, 0.99842)
 0.85 (0.99755, 0.99887, 0.99821)
+
+After a bunch of fixes to make the model work better for real data:
+s2   (0.99951, 0.99476, 0.99713)
+0.30 (0.99868, 0.99996, 0.99932)
+0.35 (0.99859, 1.0, 0.9993)
+0.40 (0.99859, 1.0, 0.9993)
+0.45 (0.99841, 1.0, 0.9992)
+0.50 (0.99832, 1.0, 0.99916)
+0.55 (0.99822, 1.0, 0.99911)
+0.60 (0.99805, 1.0, 0.99902)
+0.65 (0.99805, 1.0, 0.99902)
+0.70 (0.99766, 1.0, 0.99883)
+0.75 (0.99723, 1.0, 0.99862)
 """
 cluster = Clusterer(
     featurization_info,
@@ -148,5 +161,5 @@ cluster.set_params({"eps": EPS})
 models = {}
 models["clusterer"] = cluster
 
-with open(join(CONFIG["main_data_dir"], "prod_model.pickle"), "wb") as f:
+with open(join(CONFIG["main_data_dir"], "prod_model_0.1.4.pickle"), "wb") as f:
     pickle.dump(models, f)
