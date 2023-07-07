@@ -369,8 +369,7 @@ def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tupl
             year_similarity(paper_1.title, paper_2.title),
         ]
     )
-    # these features concat titles (no spaces) and authors
-    # to account for cases where pdf extraction left authors in the title
+    # these features concat titles (no spaces)
     features.extend(
         name_text_features(
             paper_1.title.replace(" ", ""),  # + " ".join([i.author_info_full_name for i in paper_1.authors]),
@@ -415,7 +414,7 @@ def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tupl
     )
 
     # how many are from PDFs?
-    source_counts_pdf = int(paper_1.source in PDF_SOURCES) + int(paper_2.source in PDF_SOURCES)
+    source_counts_pdf = (paper_1.source in PDF_SOURCES) or (paper_2.source in PDF_SOURCES)
     # how many are from trusted publishers?
     publisher_source_counts = int(paper_1.source in PUBLISHER_SOURCES) + int(paper_2.source in PUBLISHER_SOURCES)
     # if both are from trusted publishers, are they the same publisher or different?
