@@ -6,10 +6,8 @@ The model will be live on semanticscholar.org.
 ## TODO
 - Re-make the dataset once we have production blocks and (possibly) better PDF extractions.
 - Does `predict_incremental` work as we expect? Any differences from S2AND that need code changes?
-- Should the constraints be turned off by default? Probabl when ENG starts passing in their own.
 - Do we need `altered_cluster_signatures`? Not yet, but we might later. It'll need to be tested properly.
 - How do we test the constraints that eng will make?
-- This model has all the TIMO machinery and is verified but not yet published.
 
 ## Installation
 To install this package, run the following:
