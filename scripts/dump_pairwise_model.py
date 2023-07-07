@@ -161,5 +161,5 @@ cluster.set_params({"eps": EPS})
 models = {}
 models["clusterer"] = cluster
 
-with open(join(CONFIG["main_data_dir"], "prod_model_0.1.4.pickle"), "wb") as f:
+with open(join(CONFIG["main_data_dir"], "prod_model.pickle"), "wb") as f:
     pickle.dump(models, f)
