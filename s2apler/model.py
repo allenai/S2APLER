@@ -566,6 +566,7 @@ class Clusterer:
                     labels = list(labels)
             else:
                 labels = [0]
+                max_label = 0
 
             # now we can rejoin the null titles based only on the ids
             paper_ids_for_nulls = block_dict_no_null_titles.get(block_key, [])
