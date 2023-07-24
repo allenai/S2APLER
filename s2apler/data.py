@@ -142,7 +142,7 @@ class PDData:
         random_seed: int = 1111,
         n_jobs: int = 1,
     ):
-        logger.info("loading papers")
+        logger.debug("loading papers")
         self.papers = self.maybe_load_json(papers)
 
         # convert dictionary to namedtuples for memory reduction
@@ -191,15 +191,15 @@ class PDData:
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
             )
-        logger.info("loaded papers")
+        logger.debug("loaded papers")
 
         self.name = name
         self.mode = mode
-        logger.info("loading clusters")
+        logger.debug("loading clusters")
         self.clusters: Optional[Dict] = self.maybe_load_json(clusters)
-        logger.info("loaded clusters, loading specter")
+        logger.debug("loaded clusters, loading specter")
         self.specter_embeddings = self.maybe_load_specter(specter_embeddings)
-        logger.info("loaded specter, loading cluster seeds")
+        logger.debug("loaded specter, loading cluster seeds")
         cluster_seeds_dict = self.maybe_load_json(cluster_seeds)
         self.altered_cluster_papers = self.maybe_load_list(altered_cluster_papers)
         self.cluster_seeds_disallow = set()
@@ -219,7 +219,7 @@ class PDData:
                         self.cluster_seeds_require[paper_id_b] = cluster_num
                 cluster_num += 1
             self.max_seed_cluster_id = cluster_num
-        logger.info("loaded cluster seeds")
+        logger.debug("loaded cluster seeds")
         self.train_pairs = self.maybe_load_dataframe(train_pairs)
         self.val_pairs = self.maybe_load_dataframe(val_pairs)
         self.test_pairs = self.maybe_load_dataframe(test_pairs)
@@ -245,11 +245,11 @@ class PDData:
         if self.mode == "train":
             if self.clusters is not None:
                 self.paper_to_cluster_id = {}
-                logger.info("making paper to cluster id")
+                logger.debug("making paper to cluster id")
                 for cluster_id, cluster_info in self.clusters.items():
                     for sourced_paper_id in cluster_info["sourced_paper_ids"]:
                         self.paper_to_cluster_id[str(sourced_paper_id)] = cluster_id
-                logger.info("made paper to cluster id")
+                logger.debug("made paper to cluster id")
         elif self.mode == "inference":
             self.all_test_pairs_flag = True
         else:
@@ -258,9 +258,9 @@ class PDData:
         self.n_jobs = n_jobs
         self.paper_to_block = self.get_papers_to_block()
 
-        logger.info("preprocessing papers")
+        logger.debug("preprocessing papers")
         self.papers = preprocess_papers_parallel(self.papers, self.n_jobs)
-        logger.info("preprocessed papers")
+        logger.debug("preprocessed papers")
 
     @staticmethod
     def maybe_load_json(path_or_json: Optional[Union[str, Union[List, Dict]]]) -> Any:
@@ -607,7 +607,7 @@ class PDData:
         test_block_dict: Dict[str, List[str]] = {}
 
         test_papers = self.test_papers
-        logger.info("fixed papers split")
+        logger.debug("fixed papers split")
 
         if self.val_papers is None:
             train_papers = []
@@ -620,7 +620,7 @@ class PDData:
                     train_papers.append(paper)
                 else:
                     val_papers.append(paper)
-            logger.info(f"size of papers {len(train_papers), len(val_papers)}")
+            logger.debug(f"size of papers {len(train_papers), len(val_papers)}")
         else:
             train_papers = self.train_papers
             val_papers = self.val_papers

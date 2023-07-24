@@ -216,8 +216,8 @@ class Clusterer:
         -------
         Dict: the distance matrix dictionary, keyed by block key
         """
-        logger.info(f"Making {len(block_dict)} distance matrices")
-        logger.info("Initializing pairwise_probas")
+        logger.debug(f"Making {len(block_dict)} distance matrices")
+        logger.debug("Initializing pairwise_probas")
         # initialize pairwise_probas with correctly size arrays
         pairwise_probas = {}
         num_pairs = 0
@@ -231,7 +231,7 @@ class Clusterer:
                 pairwise_proba = np.zeros((block_size, block_size), dtype=np.float16)
             pairwise_probas[block_key] = pairwise_proba
 
-        logger.info("Pairwise probas initialized, starting making all pairs")
+        logger.debug("Pairwise probas initialized, starting making all pairs")
 
         # featurize and predict in batches
         helper_output = self.distance_matrix_helper(
@@ -245,12 +245,12 @@ class Clusterer:
         batch_num = 0
         num_batches = math.ceil(num_pairs / self.batch_size)
         while True:
-            logger.info(f"Featurizing batch {batch_num}/{num_batches}")
+            logger.debug(f"Featurizing batch {batch_num}/{num_batches}")
             count = 0
             pairs = []
             indices = []
             blocks = []
-            logger.info("Getting constraints")
+            logger.debug("Getting constraints")
             # iterate over a batch_size number of pairs
             for item in helper_output:
                 pairs.append(item[0])
@@ -275,13 +275,13 @@ class Clusterer:
             # get predictions where there isn't partial supervision
             # and fill the rest with partial supervision
             # undoing the offset by LARGE_INTEGER from above
-            logger.info("Making predict flags")
+            logger.debug("Making predict flags")
             batch_labels = np.array([i[2] for i in pairs])
             predict_flag = np.isnan(batch_labels)
             not_predict_flag = ~predict_flag
             batch_predictions = np.zeros(len(batch_features))
             # index 0 is p(not the same)
-            logger.info("Pairwise classification")
+            logger.debug("Pairwise classification")
             if np.any(predict_flag):
                 if self.nameless_classifier is not None:
                     batch_predictions[predict_flag] = (
@@ -297,7 +297,7 @@ class Clusterer:
             if np.any(not_predict_flag):
                 batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
-            logger.info("Starting to make matrices")
+            logger.debug("Starting to make matrices")
             for within_batch_index, prediction in tqdm(
                 enumerate(batch_predictions),
                 total=len(batch_predictions),
@@ -329,7 +329,7 @@ class Clusterer:
                 pairwise_proba += pairwise_proba.T
                 np.fill_diagonal(pairwise_proba, 0)
 
-        logger.info(f"{len(block_dict)} distance matrices made")
+        logger.debug(f"{len(block_dict)} distance matrices made")
         return pairwise_probas
 
     def fit(
@@ -355,7 +355,7 @@ class Clusterer:
         Clusterer: a fit clusterer, also sets the best params
         """
         assert metric_for_hyperopt in {"b3", "ratio"}
-        logger.info("Fitting clusterer")
+        logger.debug("Fitting clusterer")
         if isinstance(datasets, PDData):
             datasets = [datasets]
         val_block_dict_list = []
@@ -428,7 +428,7 @@ class Clusterer:
         self.best_params = {k: intify(v) for k, v in best_params.items()}
         self.set_params(self.best_params)
 
-        logger.info("Clusterer fit")
+        logger.debug("Clusterer fit")
         return self
 
     def set_params(self, params: Optional[Dict[str, Any]], clone_flag: bool = False):
@@ -700,13 +700,13 @@ class Clusterer:
         # get predictions where there isn't partial supervision
         # and fill the rest with partial supervision
         # undoing the offset by LARGE_INTEGER from above
-        logger.info("Making predict flags")
+        logger.debug("Making predict flags")
         batch_labels = np.array([i[2] for i in all_pairs])
         predict_flag = np.isnan(batch_labels)
         not_predict_flag = ~predict_flag
         batch_predictions = np.zeros(len(batch_features))
         # index 0 is p(not the same)
-        logger.info("Pairwise classification")
+        logger.debug("Pairwise classification")
         if np.any(predict_flag):
             if self.nameless_classifier is not None:
                 batch_predictions[predict_flag] = (
@@ -720,7 +720,7 @@ class Clusterer:
         if np.any(not_predict_flag):
             batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
-        logger.info("Computing average distances for unassigned papers")
+        logger.debug("Computing average distances for unassigned papers")
         papers_to_cluster_to_average_dist: Dict[str, Dict[int, Tuple[float, int]]] = defaultdict(
             lambda: defaultdict(lambda: (0, 0))
         )
@@ -735,7 +735,7 @@ class Clusterer:
                 previous_count + 1,
             )
 
-        logger.info("Assigning unassigned papers")
+        logger.debug("Assigning unassigned papers")
         pred_clusters = defaultdict(list)
         singleton_papers = []
         for papers_id, cluster_id in dataset.cluster_seeds_require.items():
@@ -768,7 +768,7 @@ class Clusterer:
             pred_clusters[str(new_cluster_id)] = new_cluster
             new_cluster_id += 1
 
-        logger.info("Returning incrementally predicted clusters")
+        logger.debug("Returning incrementally predicted clusters")
         return dict(pred_clusters)
 
 

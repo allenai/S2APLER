@@ -495,7 +495,7 @@ def many_pairs_featurize(
     cached_features: Dict[str, Any] = {"features": {}}
     cache_changed = False
     if use_cache:
-        logger.info("Loading cache...")
+        logger.debug("Loading cache...")
         if not os.path.exists(featurizer_info.cache_directory(dataset.name)):
             os.makedirs(featurizer_info.cache_directory(dataset.name))
         if os.path.exists(featurizer_info.cache_file_path(dataset.name)):
@@ -504,9 +504,9 @@ def many_pairs_featurize(
             else:
                 with open(featurizer_info.cache_file_path(dataset.name)) as _json_file:
                     cached_features = json.load(_json_file)
-                logger.info(f"Cache loaded with {len(cached_features['features'])} keys")
+                logger.debug(f"Cache loaded with {len(cached_features['features'])} keys")
         else:
-            logger.info("Cache initiated.")
+            logger.debug("Cache initiated.")
             cached_features = {}
             cached_features["features"] = {}
             cached_features["features_to_use"] = featurizer_info.features_to_use
@@ -514,7 +514,7 @@ def many_pairs_featurize(
     features = np.ones((len(paper_pairs), NUM_FEATURES)) * (-LARGE_INTEGER)
     labels = np.zeros(len(paper_pairs))
     pieces_of_work = []
-    logger.info(f"Creating {len(paper_pairs)} pieces of work")
+    logger.debug(f"Creating {len(paper_pairs)} pieces of work")
     for i, pair in tqdm(enumerate(paper_pairs), desc="Creating work", disable=len(paper_pairs) <= 100000):
         labels[i] = pair[2]
 
@@ -537,11 +537,11 @@ def many_pairs_featurize(
         cache_changed = True
         pieces_of_work.append(((pair[0], pair[1]), i))
 
-    logger.info("Created pieces of work")
+    logger.debug("Created pieces of work")
 
     if cache_changed:
         if n_jobs > 1:
-            logger.info(f"Cached changed, doing {len(pieces_of_work)} work in parallel")
+            logger.debug(f"Cached changed, doing {len(pieces_of_work)} work in parallel")
             with multiprocessing.Pool(processes=n_jobs if len(pieces_of_work) > 1000 else 1) as p:
                 _max = len(pieces_of_work)
                 with tqdm(total=_max, desc="Doing work", disable=_max <= 10000) as pbar:
@@ -558,37 +558,37 @@ def many_pairs_featurize(
                         features[index, :] = feature_output
                         pbar.update()
         else:
-            logger.info(f"Cached changed, doing {len(pieces_of_work)} work in serial")
+            logger.debug(f"Cached changed, doing {len(pieces_of_work)} work in serial")
             partial_func = functools.partial(parallel_helper, worker_func=_single_pair_featurize)
             for piece in tqdm(pieces_of_work, total=len(pieces_of_work), desc="Doing work"):
                 result = partial_func(piece)
                 if use_cache:
                     cached_features["features"][featurizer_info.feature_cache_key(paper_pairs[result[1]])] = result[0]
                 features[result[1], :] = result[0]
-        logger.info("Work completed")
+        logger.debug("Work completed")
 
     if use_cache and cache_changed:
-        logger.info("Writing to on disk cache")
+        logger.debug("Writing to on disk cache")
         featurizer_info.write_cache(cached_features, dataset.name)
-        logger.info(f"Cache written with {len(cached_features['features'])} keys.")
+        logger.debug(f"Cache written with {len(cached_features['features'])} keys.")
 
     if use_cache:
-        logger.info("Writing to in memory cache")
+        logger.debug("Writing to in memory cache")
         CACHED_FEATURES[featurizer_info.cache_file_path(dataset.name)] = cached_features
-        logger.info("In memory cache written")
+        logger.debug("In memory cache written")
 
     if delete_training_data:
-        logger.info("Deleting some training rows")
+        logger.debug("Deleting some training rows")
         negative_label_indices = labels == 0
         high_coauthor_sim_indices = features[:, featurizer_info.get_feature_names().index("coauthor_similarity")] > 0.95
         indices_to_remove = negative_label_indices & high_coauthor_sim_indices
-        logger.info(f"Intending to remove {sum(indices_to_remove)} rows")
+        logger.debug(f"Intending to remove {sum(indices_to_remove)} rows")
         original_size = len(labels)
         features = features[~indices_to_remove, :]
         labels = labels[~indices_to_remove]
-        logger.info(f"Removed {original_size - features.shape[0]} rows and {original_size - len(labels)} labels")
+        logger.debug(f"Removed {original_size - features.shape[0]} rows and {original_size - len(labels)} labels")
 
-    logger.info("Making numpy arrays for features and labels")
+    logger.debug("Making numpy arrays for features and labels")
     # have to do this before subselecting features
     if nameless_featurizer_info is not None:
         nameless_features = features[:, featurizer_info.nameless_indices_to_use]
@@ -599,7 +599,7 @@ def many_pairs_featurize(
     features = features[:, featurizer_info.indices_to_use]
     features[np.isnan(features)] = nan_value
 
-    logger.info("Numpy arrays made")
+    logger.debug("Numpy arrays made")
     return features, labels, nameless_features
 
 
@@ -643,7 +643,7 @@ def featurize(
     features and labels for all pairs if mode is 'inference'
     """
     if dataset.mode == "inference":
-        logger.info("featurizing all pairs")
+        logger.debug("featurizing all pairs")
         all_pairs = dataset.all_pairs()
         all_features = many_pairs_featurize(
             all_pairs,
@@ -656,7 +656,7 @@ def featurize(
             nan_value,
             False,
         )
-        logger.info("featurized all pairs")
+        logger.debug("featurized all pairs")
         return all_features
     else:
         if dataset.train_pairs is None:
@@ -680,7 +680,7 @@ def featurize(
         else:
             train_pairs, val_pairs, test_pairs = dataset.fixed_pairs()
 
-        logger.info("featurizing train")
+        logger.debug("featurizing train")
         train_features = many_pairs_featurize(
             train_pairs,
             dataset,
@@ -692,7 +692,7 @@ def featurize(
             nan_value,
             delete_training_data,
         )
-        logger.info("featurized train, featurizing val")
+        logger.debug("featurized train, featurizing val")
         val_features = many_pairs_featurize(
             val_pairs,
             dataset,
@@ -704,7 +704,7 @@ def featurize(
             nan_value,
             False,
         )
-        logger.info("featurized val, featurizing test")
+        logger.debug("featurized val, featurizing test")
         test_features = many_pairs_featurize(
             test_pairs,
             dataset,
@@ -716,5 +716,5 @@ def featurize(
             nan_value,
             False,
         )
-        logger.info("featurized test")
+        logger.debug("featurized test")
         return train_features, val_features, test_features
