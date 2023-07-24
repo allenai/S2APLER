@@ -597,7 +597,7 @@ class Clusterer:
                         labels_for_nulls.append(inverse_id_map[pdf_hash][0])
                     else:
                         max_label += 1
-                        labels_for_nulls.apppend(max_label)
+                        labels_for_nulls.append(max_label)
 
                 paper_ids_for_block = block_dict[block_key] + paper_ids_for_nulls
                 labels = labels + labels_for_nulls
