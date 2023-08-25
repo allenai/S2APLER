@@ -77,7 +77,6 @@ class PredictorConfig(BaseSettings):
     """
 
     n_jobs: int = Field(default=4, description="number of jobs to use for parallelization", required=False)
-    predict_incremental: bool = Field(default=False, description="whether to predict_incremental vs predict")
     use_default_constraints_as_supervision: bool = Field(
         default=True,
         description="Whether to use the default constraints when constructing the distance matrices. These are high precision and can save a lot of compute/time.",
@@ -141,7 +140,7 @@ class Predictor:
             mode="inference",
             n_jobs=self._config.n_jobs,
         )
-        if self._config.predict_incremental:
+        if instance.cluster_seeds:
             out = self.clusterer.predict_incremental(dataset.papers, dataset)
         else:
             out = self.clusterer.predict(dataset.get_blocks(), dataset)[0]

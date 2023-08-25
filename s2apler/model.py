@@ -512,7 +512,6 @@ class Clusterer:
                 else:
                     block_dict_no_null_titles[block_key].append(paper_id)
         block_dict = dict(block_dict_no_null_titles)
-        block_dict_no_null_titles = dict(block_dict_null_titles)
 
         if dists is None:
             dists = self.make_distance_matrices(
@@ -569,7 +568,7 @@ class Clusterer:
                 max_label = 0
 
             # now we can rejoin the null titles based only on the ids
-            paper_ids_for_nulls = block_dict_no_null_titles.get(block_key, [])
+            paper_ids_for_nulls = block_dict_null_titles.get(block_key, [])
             if len(paper_ids_for_nulls) > 0:
                 # first we compute a map from various ids to the labels
                 # have to do this again because we reassigned labels above
