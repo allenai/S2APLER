@@ -18,7 +18,6 @@ jobs:
         docker run --rm s2apler pytest tests/
         docker run --rm s2apler flake8 s2apler
         docker run --rm s2apler flake8 scripts/*.py
-        docker run --rm s2apler black s2apler --line-length 120
         docker run --rm s2apler black s2apler --check --line-length 120
         docker run --rm s2apler black scripts/*.py --check --line-length 120
         docker run --rm s2apler pytest tests/ --cov s2apler --cov-fail-under=40
