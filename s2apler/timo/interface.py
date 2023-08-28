@@ -49,7 +49,11 @@ class Instance(BaseModel):
     """
 
     papers: Dict[str, Paper]
-    cluster_seeds: Optional[Union[str, Dict]] = Field(required=False)
+    cluster_seeds: Optional[Union[str, Dict]] = Field(
+        required=False,
+        description="Pairs of source paper ids to merge or keep separate. "
+                    "Defining this means clustering in incremental mode."
+    )
 
 
 class Prediction(BaseModel):
