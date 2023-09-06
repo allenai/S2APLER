@@ -478,7 +478,7 @@ def normalize_text(text: Optional[str], special_case_apostrophes_and_dashes: boo
         try:
             text = latex_to_text(text)
         except IndexError as e:
-            logger.debug(f"Failed to convert latex to text: {text}")
+            logger.debug(f"Failed to convert latex to text with: {text} and error {e}")
     norm_text = unidecode(text).lower()
 
     if special_case_apostrophes_and_dashes:
