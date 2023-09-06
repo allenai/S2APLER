@@ -9,6 +9,7 @@ from itertools import zip_longest
 import warnings
 import numpy as np
 import pandas as pd
+import logging
 from numpy import inner
 from numpy.linalg import norm
 from collections import Counter
@@ -17,6 +18,8 @@ from text_unidecode import unidecode
 import jellyfish
 
 from s2apler.consts import NUMPY_NAN
+
+logger = logging.getLogger("s2apler")
 
 latex_to_text = LatexNodes2Text().latex_to_text
 
@@ -472,7 +475,10 @@ def normalize_text(text: Optional[str], special_case_apostrophes_and_dashes: boo
     # if there is the possibility of latex
     # we can convert it to text
     if "\\" in text or text.count("$") > 1:
-        text = latex_to_text(text)
+        try:
+            text = latex_to_text(text)
+        except IndexError as e:
+            logger.debug(f"Failed to convert latex to text: {text}")
     norm_text = unidecode(text).lower()
 
     if special_case_apostrophes_and_dashes:
