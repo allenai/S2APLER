@@ -50,7 +50,7 @@ class Author(NamedTuple):
 
 class Paper(NamedTuple):
     title: str
-    abstract: str
+    abstract: Optional[str]
     has_abstract: Optional[bool]
     title_ngrams_words: Optional[Counter]
     abstract_ngrams_words: Optional[Counter]
@@ -920,7 +920,9 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
     key, paper = item
 
     title = normalize_text(paper.title)
-    abstract = normalize_text(paper.abstract)
+    abstract = ""
+    if paper.has_abstract:
+        abstract = normalize_text(paper.abstract)
     if paper.title is None:
         title_lower_simple = ""
     else:
