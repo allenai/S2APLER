@@ -439,6 +439,8 @@ class TestInterfaceIntegration(unittest.TestCase):
         cluster_predictions = container.predict_batch(instances)[0].prediction
 
         # the cluster seed requirement is fulfilled
-        self.assertEqual(set(cluster_predictions["0"]), {"1448693640485408768", "3406298321", "3371683470", "3206548605"})
+        self.assertEqual(
+            set(cluster_predictions["0"]), {"1448693640485408768", "3406298321", "3371683470", "3206548605"}
+        )
         # more expected results
         self.assertEqual(set(cluster_predictions["1"]), {"1591643905", "2459452638", "2468186458"})
