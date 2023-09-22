@@ -80,7 +80,7 @@ class PredictorConfig(BaseSettings):
     vars the consuming application needs to set.
     """
 
-    n_jobs: int = Field(default=4, description="number of jobs to use for parallelization", required=False)
+    n_jobs: int = Field(default=1, description="number of jobs to use for parallelization", required=False)
     use_default_constraints_as_supervision: bool = Field(
         default=True,
         description="Whether to use the default constraints when constructing the distance matrices. These are high precision and can save a lot of compute/time.",
@@ -131,6 +131,8 @@ class Predictor:
             self.clusterer.set_params({"eps": self._config.eps})
         self.clusterer.use_default_constraints_as_supervision = self._config.use_default_constraints_as_supervision
         self.clusterer.dont_merge_cluster_seeds = self._config.dont_merge_cluster_seeds
+        self.clusterer.n_jobs = self._config.n_jobs
+        self.clusterer.classifier.n_job = self._config.n_jobs
 
     def predict_one(self, instance: Instance) -> Prediction:
         """
