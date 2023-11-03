@@ -444,3 +444,38 @@ class TestInterfaceIntegration(unittest.TestCase):
         )
         # more expected results
         self.assertEqual(set(cluster_predictions["1"]), {"1591643905", "2459452638", "2468186458"})
+
+    def test__hgm_remains_separated(self, container):
+        # Setup 2 HGM source papers with the same source id. They should merge.
+        hgm_sp1 = {
+            "authors": [],
+            "abstract": None,
+            "references": [],
+            "sourced_paper_id": 1,
+            "source": "HumanGeneratedMetadata",
+            "title": "Non-Destructive Tablet Hardness Testing",
+            "year": 2002,
+            "doi": "10.1255/NIRN.669",
+            "fieldsofstudy": ["Materials Science"],
+            "publicationdate": "2002-08-01",
+            "journal_name": "8-9",
+            "block": "nondestructivetablethardnesstesting",
+            "corpus_paper_id": 100917401,
+            "source_id": "100917401",
+        }
+        hgm_sp2 = hgm_sp1.copy()
+        hgm_sp2["sourced_paper_id"] = 2
+
+        same_hgm_source_id_instance = Instance(papers={"1": hgm_sp1, "2": hgm_sp2}, cluster_seeds=None)
+        same_hgm_source_id_prediction = container.predict_batch([same_hgm_source_id_instance])[0].prediction.values()
+        self.assertEqual(set(list(same_hgm_source_id_prediction)[0]), {"1", "2"})
+
+        # Setup 2 HGM source papers with different source ids. They should not merge
+        hgm_diff_source_id = hgm_sp1.copy()
+        hgm_diff_source_id["sourced_paper_id"] = 3
+        hgm_diff_source_id["doi"] = None
+        hgm_diff_source_id["source_id"] = "123"
+
+        diff_hgm_source_id_instance = Instance(papers={"1": hgm_sp1, "3": hgm_diff_source_id}, cluster_seeds=None)
+        diff_hgm_source_id_prediction = container.predict_batch([diff_hgm_source_id_instance])[0].prediction.values()
+        self.assertEqual(list(diff_hgm_source_id_prediction), [["1"], ["3"]])

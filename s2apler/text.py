@@ -88,6 +88,7 @@ PUBLISHER_SOURCES = {
     "Thieme",
     "Uchicago",
     "Wiley",
+    "HumanGeneratedMetadata",  # Not a publisher, but is high quality and source papers with the same source ID must not be clustered together
     #  "WoltersKluwer", # untrustworthy or something?
 }
 
