@@ -22,11 +22,24 @@ pip install -e .
 ```
 
 If you run into cryptic errors about GCC on macOS while installing the requirments, try this instead:
+
 ```bash
 CFLAGS='-stdlib=libc++' pip install -r requirements.in
 ```
 
-## Data 
+Alternatively, you can use `uv`:
+
+```bash
+git clone https://github.com/allenai/S2APLER.git
+cd S2APLER
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv sync
+uv pip install -e .
+```
+
+## Data
+
 To obtain the paper clustering dataset, run the following command after the package is installed (from inside the `S2APLER` directory):  
 ```[Expected download size is: 3.1 GiB]```
 
