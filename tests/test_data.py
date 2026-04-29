@@ -1,6 +1,7 @@
 import unittest
 import pytest
 
+from s2apler.consts import CLUSTER_SEEDS_LOOKUP
 from s2apler.data import PDData
 
 
@@ -55,3 +56,83 @@ class TestData(unittest.TestCase):
             "PM_146905": ["65911307"],
         }
         assert cluster_to_signatures == expected_cluster_to_signatures
+
+
+class TestSourceUriConstraint(unittest.TestCase):
+    """Same source_uris -> must-merge, even when pdf_hash differs (e.g. HAL serves
+    byte-different PDFs per fetch). See allenai/scholar#41863."""
+
+    @staticmethod
+    def _make_dataset(papers):
+        return PDData(papers=papers, name="t", mode="inference", balanced_pair_sample=False)
+
+    def test_shared_source_uri_with_different_pdf_hash_requires_merge(self):
+        url = "https://inria.hal.science/hal-01136686/file/chiaroscuro-sigmod-main-hal.pdf"
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "Chiaroscuro",
+                    "authors": [],
+                    "pdf_hash": "hash_a",
+                    "source_uris": [url],
+                    "block": "chiaroscuro",
+                },
+                "2": {
+                    "title": "Chiaroscuro",
+                    "authors": [],
+                    "pdf_hash": "hash_b",
+                    "source_uris": [url],
+                    "block": "chiaroscuro",
+                },
+            }
+        )
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+
+    def test_disjoint_source_uris_does_not_force_merge(self):
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "A",
+                    "authors": [],
+                    "source_uris": ["https://example.com/a.pdf"],
+                    "block": "a",
+                },
+                "2": {
+                    "title": "A",
+                    "authors": [],
+                    "source_uris": ["https://example.com/b.pdf"],
+                    "block": "a",
+                },
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+
+    def test_missing_source_uris_does_not_force_merge(self):
+        dataset = self._make_dataset(
+            {
+                "1": {"title": "A", "authors": [], "block": "a"},
+                "2": {"title": "A", "authors": [], "source_uris": ["https://example.com/a.pdf"], "block": "a"},
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+
+    def test_doi_match_still_takes_precedence(self):
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "A",
+                    "authors": [],
+                    "doi": "10.1/x",
+                    "source_uris": ["https://example.com/a.pdf"],
+                    "block": "a",
+                },
+                "2": {
+                    "title": "A",
+                    "authors": [],
+                    "doi": "10.1/x",
+                    "source_uris": ["https://example.com/b.pdf"],
+                    "block": "a",
+                },
+            }
+        )
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]

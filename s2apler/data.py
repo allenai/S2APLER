@@ -73,6 +73,7 @@ class Paper(NamedTuple):
     pdf_hash: Optional[str]
     source: Optional[str]
     block: Optional[str]
+    source_uris: Optional[List[str]] = None
 
 
 class PDData:
@@ -190,6 +191,7 @@ class PDData:
                 pdf_hash=paper.get("pdf_hash", None),
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
+                source_uris=paper.get("source_uris", None),
             )
         logger.debug("loaded papers")
 
@@ -405,6 +407,13 @@ class PDData:
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif paper_1.pdf_hash is not None and paper_2.pdf_hash is not None and paper_1.pdf_hash == paper_2.pdf_hash:
             # same pdf hash - same paper
+            return CLUSTER_SEEDS_LOOKUP["require"]
+        elif (
+            paper_1.source_uris and paper_2.source_uris and not set(paper_1.source_uris).isdisjoint(paper_2.source_uris)
+        ):
+            # PDF was fetched from the same URL, so it's the same paper. pdf_hash is not always
+            # sufficient because some hosts (e.g. inria.hal.science) serve byte-different PDFs per
+            # fetch (added watermark/timestamp), producing a fresh pdf_hash on every recrawl.
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_id is not None
