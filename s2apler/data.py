@@ -409,11 +409,19 @@ class PDData:
             # same pdf hash - same paper
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
-            paper_1.source_uris and paper_2.source_uris and not set(paper_1.source_uris).isdisjoint(paper_2.source_uris)
+            paper_1.source_uris
+            and paper_2.source_uris
+            and not set(paper_1.source_uris).isdisjoint(paper_2.source_uris)
+            and paper_1.title
+            and paper_2.title
+            and paper_1.title == paper_2.title
         ):
-            # PDF was fetched from the same URL, so it's the same paper. pdf_hash is not always
-            # sufficient because some hosts (e.g. inria.hal.science) serve byte-different PDFs per
-            # fetch (added watermark/timestamp), producing a fresh pdf_hash on every recrawl.
+            # PDF was fetched from the same URL AND extracted titles match. pdf_hash alone
+            # isn't sufficient because some hosts (e.g. inria.hal.science) serve byte-different
+            # PDFs per fetch (added watermark/timestamp), producing a fresh pdf_hash on every
+            # recrawl. The title-equality guard rules out URLs that legitimately serve multiple
+            # papers (proceedings volumes, journal/repository index pages). Titles compared post-
+            # preprocessing, so they are already lowercased + unidecoded + whitespace-normalized.
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_id is not None

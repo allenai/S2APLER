@@ -59,8 +59,10 @@ class TestData(unittest.TestCase):
 
 
 class TestSourceUriConstraint(unittest.TestCase):
-    """Same source_uris -> must-merge, even when pdf_hash differs (e.g. HAL serves
-    byte-different PDFs per fetch). See allenai/scholar#41863."""
+    """Same source_uris AND same title -> must-merge, even when pdf_hash differs (e.g. HAL
+    serves byte-different PDFs per fetch). The title check guards against URLs that legitimately
+    serve multiple papers (proceedings volumes, journal index pages). See allenai/scholar#41863
+    and allenai/S2APLER#16."""
 
     @staticmethod
     def _make_dataset(papers):
@@ -112,6 +114,28 @@ class TestSourceUriConstraint(unittest.TestCase):
             {
                 "1": {"title": "A", "authors": [], "block": "a"},
                 "2": {"title": "A", "authors": [], "source_uris": ["https://example.com/a.pdf"], "block": "a"},
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+
+    def test_shared_uri_but_different_titles_does_not_force_merge(self):
+        # Models the proceedings/index-page case: one URL serves multiple distinct papers.
+        # E.g. http://splc2010.postech.ac.kr/SPLC2010_second_volume.pdf has 51 distinct titles.
+        proceedings_url = "https://example.org/proceedings_2010.pdf"
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "First paper in the proceedings volume",
+                    "authors": [],
+                    "source_uris": [proceedings_url],
+                    "block": "first",
+                },
+                "2": {
+                    "title": "Second paper in the proceedings volume",
+                    "authors": [],
+                    "source_uris": [proceedings_url],
+                    "block": "second",
+                },
             }
         )
         assert dataset.get_constraint("1", "2") is None
