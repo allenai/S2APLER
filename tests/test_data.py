@@ -140,6 +140,76 @@ class TestSourceUriConstraint(unittest.TestCase):
         )
         assert dataset.get_constraint("1", "2") is None
 
+    def test_shared_uri_same_title_but_doi_disagrees_does_not_force_merge(self):
+        # The "Front Matter from same publisher" case Sergey raised: each issue's Front Matter
+        # has a distinct DOI but identical title and may sit at the same publisher domain URL.
+        url = "https://example.org/journal_volume_landing.pdf"
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "Front Matter",
+                    "authors": [],
+                    "doi": "10.1/issue-2020",
+                    "source_uris": [url],
+                    "block": "frontmatter",
+                },
+                "2": {
+                    "title": "Front Matter",
+                    "authors": [],
+                    "doi": "10.1/issue-2021",
+                    "source_uris": [url],
+                    "block": "frontmatter",
+                },
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+
+    def test_shared_uri_same_title_but_first_authors_disagree_does_not_force_merge(self):
+        # The college-catalog case: one URL serves a directory page; "papers" mined from it
+        # share a generic title but have distinct first-author last names per entry.
+        url = "https://example.edu/department/catalog.pdf"
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "Linguistics",
+                    "authors": [{"first": "Alice", "last": "Smith"}],
+                    "source_uris": [url],
+                    "block": "linguistics",
+                },
+                "2": {
+                    "title": "Linguistics",
+                    "authors": [{"first": "Bob", "last": "Jones"}],
+                    "source_uris": [url],
+                    "block": "linguistics",
+                },
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+
+    def test_shared_uri_same_title_with_matching_first_author_force_merges(self):
+        # Sanity check that the author guard doesn't over-fire: when both have the same
+        # first author last name the URL+title constraint should still trigger.
+        url = "https://inria.hal.science/hal-01136686/file/chiaroscuro-sigmod-main-hal.pdf"
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "Chiaroscuro",
+                    "authors": [{"first": "Tristan", "last": "Allard"}],
+                    "pdf_hash": "hash_a",
+                    "source_uris": [url],
+                    "block": "chiaroscuro",
+                },
+                "2": {
+                    "title": "Chiaroscuro",
+                    "authors": [{"first": "Tristan", "last": "Allard"}],
+                    "pdf_hash": "hash_b",
+                    "source_uris": [url],
+                    "block": "chiaroscuro",
+                },
+            }
+        )
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+
     def test_doi_match_still_takes_precedence(self):
         dataset = self._make_dataset(
             {

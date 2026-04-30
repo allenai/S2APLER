@@ -76,6 +76,21 @@ class Paper(NamedTuple):
     source_uris: Optional[List[str]] = None
 
 
+def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
+    """True if any of {DOI, PMID, first-author last name} are populated on both
+    papers and conflict. Used to gate URL+title-based hard merge: see allenai/scholar#41863."""
+    if p1.doi and p2.doi and p1.doi != p2.doi:
+        return True
+    if p1.pmid and p2.pmid and p1.pmid != p2.pmid:
+        return True
+    if p1.authors and p2.authors:
+        a1 = p1.authors[0].author_info_last_normalized
+        a2 = p2.authors[0].author_info_last_normalized
+        if a1 and a2 and a1 != a2:
+            return True
+    return False
+
+
 class PDData:
     """
     The main class for holding our representation of an paper disambiguation data
@@ -415,13 +430,16 @@ class PDData:
             and paper_1.title
             and paper_2.title
             and paper_1.title == paper_2.title
+            and not _strong_signals_disagree(paper_1, paper_2)
         ):
             # PDF was fetched from the same URL AND extracted titles match. pdf_hash alone
             # isn't sufficient because some hosts (e.g. inria.hal.science) serve byte-different
             # PDFs per fetch (added watermark/timestamp), producing a fresh pdf_hash on every
-            # recrawl. The title-equality guard rules out URLs that legitimately serve multiple
-            # papers (proceedings volumes, journal/repository index pages). Titles compared post-
-            # preprocessing, so they are already lowercased + unidecoded + whitespace-normalized.
+            # recrawl. The title-equality and strong-signal-agreement guards together rule out
+            # URLs that legitimately serve multiple papers — proceedings volumes (different
+            # titles), publisher domains hosting many issues' "Front Matter"/"Editorial" entries
+            # (different DOIs), or college catalog pages (different first-authors per faculty).
+            # Titles compared post-preprocessing — already lowercased/unidecoded/whitespace-normed.
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_id is not None
