@@ -1,6 +1,6 @@
 [project]
 name = "s2apler"
-version = "0.2.6"
+version = "0.2.7"
 description = "S2APLER: Semantic Scholar (S2) Agglomeration of Papers with Low Error Rate"
 readme = "README.md"
 requires-python = ">=3.8"
