@@ -1,4 +1,4 @@
-FROM python:3.8-bookworm
+FROM python:3.11-bookworm
 
 # install base packages
 RUN apt-get clean \
