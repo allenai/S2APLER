@@ -3,7 +3,7 @@ from __future__ import annotations
 from s2apler.eval import b3_precision_recall_fscore
 from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
 from s2apler.data import PDData
-from s2apler.consts import LARGE_INTEGER, DEFAULT_CHUNK_SIZE
+from s2apler.consts import CLUSTER_SEEDS_LOOKUP, LARGE_INTEGER, DEFAULT_CHUNK_SIZE
 
 from typing import Dict, Optional, Any, Union, List, Tuple
 from collections import defaultdict
@@ -453,10 +453,102 @@ class Clusterer:
         else:
             self.cluster_model.set_params(**params)
 
+    @staticmethod
+    def _hard_identifiers_for_paper(
+        dataset: PDData,
+        paper_id: str,
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        paper = dataset.papers[paper_id]
+        return paper.doi, paper.pmid, paper.pdf_hash
+
+    def _is_disallowed_from_cluster(
+        self,
+        dataset: PDData,
+        paper_id: str,
+        cluster_papers: List[str],
+    ) -> bool:
+        if not self.use_default_constraints_as_supervision:
+            return False
+        for clustered_paper_id in cluster_papers:
+            value = dataset.get_constraint(
+                paper_id,
+                clustered_paper_id,
+                dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
+            )
+            if value == CLUSTER_SEEDS_LOOKUP["disallow"]:
+                return True
+        return False
+
+    def _clusters_are_disallowed(
+        self,
+        dataset: PDData,
+        cluster_a: List[str],
+        cluster_b: List[str],
+    ) -> bool:
+        for paper_id in cluster_a:
+            if self._is_disallowed_from_cluster(dataset, paper_id, cluster_b):
+                return True
+        return False
+
+    def _merge_clusters_by_hard_ids(
+        self,
+        clusters: Dict[str, List[str]],
+        dataset: PDData,
+    ) -> Dict[str, List[str]]:
+        if not self.use_default_constraints_as_supervision:
+            return clusters
+
+        cluster_to_identifiers = {}
+        identifier_to_clusters = defaultdict(list)
+        for cluster_id, clustered_papers in clusters.items():
+            identifiers = {
+                identifier
+                for paper_id in clustered_papers
+                for identifier in self._hard_identifiers_for_paper(dataset, paper_id)
+                if identifier is not None
+            }
+            cluster_to_identifiers[cluster_id] = identifiers
+            for identifier in identifiers:
+                identifier_to_clusters[identifier].append(cluster_id)
+
+        parent = {cluster_id: cluster_id for cluster_id in clusters}
+        component_papers = {cluster_id: list(clustered_papers) for cluster_id, clustered_papers in clusters.items()}
+
+        def find(cluster_id: str) -> str:
+            while parent[cluster_id] != cluster_id:
+                parent[cluster_id] = parent[parent[cluster_id]]
+                cluster_id = parent[cluster_id]
+            return cluster_id
+
+        def union(target_cluster_id: str, source_cluster_id: str) -> None:
+            target_root = find(target_cluster_id)
+            source_root = find(source_cluster_id)
+            if target_root == source_root:
+                return
+            if self._clusters_are_disallowed(
+                dataset,
+                component_papers[target_root],
+                component_papers[source_root],
+            ):
+                return
+            parent[source_root] = target_root
+            component_papers[target_root].extend(component_papers[source_root])
+
+        for cluster_id in clusters:
+            for identifier in cluster_to_identifiers[cluster_id]:
+                for other_cluster_id in identifier_to_clusters[identifier]:
+                    union(find(cluster_id), find(other_cluster_id))
+
+        merged_clusters = defaultdict(list)
+        for cluster_id, clustered_papers in clusters.items():
+            merged_clusters[find(cluster_id)].extend(clustered_papers)
+
+        return dict(merged_clusters)
+
     def predict(
         self,
         block_dict: Dict[str, List[str]],
-        dataset: PDData,
+        dataset: Optional[PDData],
         dists: Optional[Dict[str, np.array]] = None,
         cluster_model_params: Optional[Dict[str, Any]] = None,
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
@@ -491,7 +583,12 @@ class Clusterer:
 
         pred_clusters = defaultdict(list)
 
+        if dataset is None and dists is None:
+            raise ValueError("dataset is required when dists are not precomputed")
+
         if use_s2_clusters:
+            if dataset is None:
+                raise ValueError("dataset is required when use_s2_clusters=True")
             for _, papers_list in block_dict.items():
                 for _paper in papers_list:
                     s2_cluster_key = dataset.papers[_paper].corpus_paper_id
@@ -501,17 +598,18 @@ class Clusterer:
 
             return dict(pred_clusters), dists
 
-        # we need to remove all the null titles from the block_dict and then reattach them later
-        block_dict_no_null_titles = defaultdict(list)
         block_dict_null_titles = defaultdict(list)
-        for block_key, paper_ids in block_dict.items():
-            for paper_id in paper_ids:
-                title = dataset.papers[paper_id].title
-                if title is None or len(title) == 0:
-                    block_dict_null_titles[block_key].append(paper_id)
-                else:
-                    block_dict_no_null_titles[block_key].append(paper_id)
-        block_dict = dict(block_dict_no_null_titles)
+        if dataset is not None:
+            # we need to remove all the null titles from the block_dict and then reattach them later
+            block_dict_no_null_titles = defaultdict(list)
+            for block_key, paper_ids in block_dict.items():
+                for paper_id in paper_ids:
+                    title = dataset.papers[paper_id].title
+                    if title is None or len(title) == 0:
+                        block_dict_null_titles[block_key].append(paper_id)
+                    else:
+                        block_dict_no_null_titles[block_key].append(paper_id)
+            block_dict = dict(block_dict_no_null_titles)
 
         if dists is None:
             dists = self.make_distance_matrices(
@@ -537,7 +635,7 @@ class Clusterer:
                 for i, loc in enumerate(negative_one_label_locations):
                     labels[loc] = max_label + 1 + i
 
-                if self.use_default_constraints_as_supervision:
+                if dataset is not None and self.use_default_constraints_as_supervision:
                     # at this point it is possible that clusters that have overlapping
                     # dois, pdf_hashes or pmids are STILL not joined together
                     # due to the 0 enforced distance not being enough to outweigh
@@ -607,7 +705,13 @@ class Clusterer:
             for paper_id, label in zip(paper_ids_for_block, labels):
                 pred_clusters[str(block_key) + "_" + str(label)].append(paper_id)
 
-        return dict(pred_clusters), dists
+        pred_clusters = dict(pred_clusters)
+        if dataset is not None:
+            pred_clusters = self._merge_clusters_by_hard_ids(
+                pred_clusters,
+                dataset,
+            )
+        return pred_clusters, dists
 
     def predict_incremental(self, block_papers: List[str], dataset: PDData):
         """
@@ -625,7 +729,8 @@ class Clusterer:
         to cluster a small number of new papers into (block size * number of new papers should be less
         than the normal batch size).
 
-        Note: this function was designed to work on a single block at a time.
+        If multiple blocks are passed, this function applies model-based incremental logic to each
+        block independently, then merges clusters across blocks only when hard identifiers match.
 
         Parameters
         ----------
@@ -638,138 +743,245 @@ class Clusterer:
         -------
         Dict: the predicted clusters
         """
-        recluster_map = {}
-        cluster_seeds_require = copy.deepcopy(dataset.cluster_seeds_require)
-        if dataset.altered_cluster_papers is not None:
-            altered_cluster_nums = set(
-                dataset.cluster_seeds_require[altered_paper_id] for altered_paper_id in dataset.altered_cluster_papers
-            )
-            if len(altered_cluster_nums) > 0:
-                cluster_seeds_require_inverse: Dict[int, list] = {}
-                for papers_id, cluster_num in dataset.cluster_seeds_require.items():
-                    if cluster_num not in cluster_seeds_require_inverse:
-                        cluster_seeds_require_inverse[cluster_num] = []
-                    cluster_seeds_require_inverse[cluster_num].append(papers_id)
-                for altered_cluster_num in altered_cluster_nums:
-                    papers_ids_for_cluster_num = cluster_seeds_require_inverse[altered_cluster_num]
 
-                    # Note: incremental_dont_use_cluster_seeds is set to True, because at this stage
-                    # of incremental clustering we are splitting up the claimed profiles that we received
-                    # from production so that they align with s2aplers's predictions. When doing this, we
-                    # don't want to use the passed in cluster seeds, because they reflect the claimed profile, not
-                    # s2apler's predictions
-                    reclustered_output, _ = self.predict(
-                        {"block": papers_ids_for_cluster_num},
-                        dataset,
-                        incremental_dont_use_cluster_seeds=True,
-                    )
-                    if len(reclustered_output) > 1:
-                        for i, new_cluster_of_papers in enumerate(reclustered_output.values()):
-                            new_cluster_num = str(altered_cluster_num) + f"_{i}"
-                            recluster_map[new_cluster_num] = altered_cluster_num
-                            for reclustered_papers_id in new_cluster_of_papers:
-                                cluster_seeds_require[reclustered_papers_id] = new_cluster_num  # type: ignore
+        def has_title(paper_id: str) -> bool:
+            title = dataset.papers[paper_id].title
+            return title is not None and len(title) > 0
 
-        all_pairs = []
-        for possibly_unassigned_paper in block_papers:
-            if possibly_unassigned_paper in cluster_seeds_require:
-                continue
-            unassigned_paper = possibly_unassigned_paper
-            for paper_id in cluster_seeds_require.keys():
-                label = np.nan
-                if self.use_default_constraints_as_supervision:
-                    value = dataset.get_constraint(
-                        unassigned_paper,
-                        paper_id,
-                        dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
-                    )
-                    if value is not None:
-                        label = value - LARGE_INTEGER
-                all_pairs.append((unassigned_paper, paper_id, label))
+        def hard_identifiers(
+            paper_id: str,
+        ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+            return self._hard_identifiers_for_paper(dataset, paper_id)
 
-        batch_features, _, batch_nameless_features = many_pairs_featurize(
-            all_pairs,
-            dataset,
-            self.featurizer_info,
-            self.n_jobs,
-            use_cache=self.use_cache,
-            chunk_size=DEFAULT_CHUNK_SIZE,
-            nameless_featurizer_info=self.nameless_featurizer_info,
-        )
+        def is_disallowed_from_cluster(paper_id: str, cluster_papers: List[str]) -> bool:
+            return self._is_disallowed_from_cluster(dataset, paper_id, cluster_papers)
 
-        # get predictions where there isn't partial supervision
-        # and fill the rest with partial supervision
-        # undoing the offset by LARGE_INTEGER from above
-        logger.debug("Making predict flags")
-        batch_labels = np.array([i[2] for i in all_pairs])
-        predict_flag = np.isnan(batch_labels)
-        not_predict_flag = ~predict_flag
-        batch_predictions = np.zeros(len(batch_features))
-        # index 0 is p(not the same)
-        logger.debug("Pairwise classification")
-        if np.any(predict_flag):
-            if self.nameless_classifier is not None:
-                batch_predictions[predict_flag] = (
-                    self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
-                    + self.nameless_classifier.predict_proba(batch_nameless_features[predict_flag, :])[  # type: ignore
-                        :, 0
-                    ]
-                ) / 2
-            else:
-                batch_predictions[predict_flag] = self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
-        if np.any(not_predict_flag):
-            batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
+        block_papers_by_block: Dict[Any, List[str]] = defaultdict(list)
+        for paper_id in block_papers:
+            block_papers_by_block[dataset.papers[paper_id].block].append(paper_id)
 
-        logger.debug("Computing average distances for unassigned papers")
-        papers_to_cluster_to_average_dist: Dict[str, Dict[int, Tuple[float, int]]] = defaultdict(
-            lambda: defaultdict(lambda: (0, 0))
-        )
-        for papers_pair, dist in zip(all_pairs, batch_predictions):
-            unassigned_paper, assigned_paper, _ = papers_pair
-            if assigned_paper not in cluster_seeds_require:
-                continue
-            cluster_id = cluster_seeds_require[assigned_paper]
-            previous_average, previous_count = papers_to_cluster_to_average_dist[unassigned_paper][cluster_id]
-            papers_to_cluster_to_average_dist[unassigned_paper][cluster_id] = (
-                (previous_average * previous_count + dist) / (previous_count + 1),
-                previous_count + 1,
-            )
-
-        logger.debug("Assigning unassigned papers")
-        pred_clusters = defaultdict(list)
-        singleton_papers = []
-        for papers_id, cluster_id in dataset.cluster_seeds_require.items():
-            pred_clusters[f"{cluster_id}"].append(papers_id)
-        for (
-            unassigned_paper,
-            cluster_dists,
-        ) in papers_to_cluster_to_average_dist.items():
-            best_cluster_id = None
-            best_dist = float("inf")
-            for cluster_id, (average_dist, _) in cluster_dists.items():
-                if average_dist < best_dist and average_dist < self.cluster_model.eps:
-                    best_cluster_id = cluster_id
-                    best_dist = average_dist
-            if best_cluster_id is not None:
-                # undo the reclustering step
-                new_name_disallowed = False
-                if best_cluster_id in recluster_map:
-                    best_cluster_id = recluster_map[best_cluster_id]  # type: ignore
-                if new_name_disallowed:
-                    singleton_papers.append(unassigned_paper)
-                else:
-                    pred_clusters[f"{best_cluster_id}"].append(unassigned_paper)
-            else:
-                singleton_papers.append(unassigned_paper)
-
-        reclustered_output, _ = self.predict({"block": singleton_papers}, dataset)
+        pred_clusters: Dict[str, List[str]] = defaultdict(list)
         new_cluster_id = dataset.max_seed_cluster_id or 0
-        for new_cluster in reclustered_output.values():
-            pred_clusters[str(new_cluster_id)] = new_cluster
+
+        def add_new_cluster(new_cluster: List[str]) -> str:
+            nonlocal new_cluster_id
+            while str(new_cluster_id) in pred_clusters:
+                new_cluster_id += 1
+            cluster_id = str(new_cluster_id)
+            pred_clusters[cluster_id] = list(new_cluster)
             new_cluster_id += 1
+            return cluster_id
+
+        for block_key, papers_for_block in block_papers_by_block.items():
+            block_paper_set = set(papers_for_block)
+            block_pred_clusters: Dict[str, List[str]] = defaultdict(list)
+            recluster_map = {}
+            cluster_seeds_require = {
+                paper_id: cluster_id
+                for paper_id, cluster_id in copy.deepcopy(dataset.cluster_seeds_require).items()
+                if paper_id in block_paper_set
+            }
+
+            if dataset.altered_cluster_papers is not None:
+                altered_cluster_nums = {
+                    dataset.cluster_seeds_require[altered_paper_id]
+                    for altered_paper_id in dataset.altered_cluster_papers
+                    if altered_paper_id in cluster_seeds_require
+                }
+                if len(altered_cluster_nums) > 0:
+                    cluster_seeds_require_inverse: Dict[Any, List[str]] = {}
+                    for paper_id, cluster_num in cluster_seeds_require.items():
+                        if cluster_num not in cluster_seeds_require_inverse:
+                            cluster_seeds_require_inverse[cluster_num] = []
+                        cluster_seeds_require_inverse[cluster_num].append(paper_id)
+                    for altered_cluster_num in altered_cluster_nums:
+                        paper_ids_for_cluster_num = cluster_seeds_require_inverse[altered_cluster_num]
+
+                        # Split the claimed profile using S2APLER predictions, not the passed-in profile seed.
+                        reclustered_output, _ = self.predict(
+                            {block_key: paper_ids_for_cluster_num},
+                            dataset,
+                            incremental_dont_use_cluster_seeds=True,
+                        )
+                        if len(reclustered_output) > 1:
+                            for i, new_cluster_of_papers in enumerate(reclustered_output.values()):
+                                reclustered_cluster_num = str(altered_cluster_num) + f"_{i}"
+                                recluster_map[reclustered_cluster_num] = altered_cluster_num
+                                for reclustered_paper_id in new_cluster_of_papers:
+                                    cluster_seeds_require[reclustered_paper_id] = reclustered_cluster_num
+
+            for paper_id, cluster_id in dataset.cluster_seeds_require.items():
+                if paper_id not in block_paper_set:
+                    continue
+                cluster_key = f"{cluster_id}"
+                pred_clusters[cluster_key].append(paper_id)
+                block_pred_clusters[cluster_key].append(paper_id)
+
+            assigned_seed_papers = [paper_id for paper_id in cluster_seeds_require if has_title(paper_id)]
+            unassigned_title_papers = []
+            unassigned_null_title_papers = []
+            for paper_id in papers_for_block:
+                if paper_id in cluster_seeds_require:
+                    continue
+                if has_title(paper_id):
+                    unassigned_title_papers.append(paper_id)
+                else:
+                    unassigned_null_title_papers.append(paper_id)
+
+            seed_inverse_id_map = {}
+            for cluster_id, clustered_papers in block_pred_clusters.items():
+                for clustered_paper_id in clustered_papers:
+                    for identifier in hard_identifiers(clustered_paper_id):
+                        if identifier is not None and identifier not in seed_inverse_id_map:
+                            seed_inverse_id_map[identifier] = cluster_id
+
+            remaining_unassigned_title_papers = []
+            for paper_id in unassigned_title_papers:
+                target_cluster_id = None
+                for identifier in hard_identifiers(paper_id):
+                    if identifier is not None and identifier in seed_inverse_id_map:
+                        target_cluster_id = seed_inverse_id_map[identifier]
+                        break
+                if target_cluster_id is None or is_disallowed_from_cluster(
+                    paper_id,
+                    block_pred_clusters[target_cluster_id],
+                ):
+                    remaining_unassigned_title_papers.append(paper_id)
+                    continue
+
+                pred_clusters[target_cluster_id].append(paper_id)
+                block_pred_clusters[target_cluster_id].append(paper_id)
+                for identifier in hard_identifiers(paper_id):
+                    if identifier is not None and identifier not in seed_inverse_id_map:
+                        seed_inverse_id_map[identifier] = target_cluster_id
+            unassigned_title_papers = remaining_unassigned_title_papers
+
+            singleton_papers = []
+            all_pairs = []
+            if len(assigned_seed_papers) == 0:
+                singleton_papers.extend(unassigned_title_papers)
+            else:
+                for unassigned_paper in unassigned_title_papers:
+                    for paper_id in assigned_seed_papers:
+                        label = np.nan
+                        if self.use_default_constraints_as_supervision:
+                            value = dataset.get_constraint(
+                                unassigned_paper,
+                                paper_id,
+                                dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
+                            )
+                            if value is not None:
+                                label = value - LARGE_INTEGER
+                        all_pairs.append((unassigned_paper, paper_id, label))
+
+            if len(all_pairs) > 0:
+                batch_features, _, batch_nameless_features = many_pairs_featurize(
+                    all_pairs,
+                    dataset,
+                    self.featurizer_info,
+                    self.n_jobs,
+                    use_cache=self.use_cache,
+                    chunk_size=DEFAULT_CHUNK_SIZE,
+                    nameless_featurizer_info=self.nameless_featurizer_info,
+                )
+
+                # get predictions where there isn't partial supervision
+                # and fill the rest with partial supervision
+                # undoing the offset by LARGE_INTEGER from above
+                logger.debug("Making predict flags")
+                batch_labels = np.array([i[2] for i in all_pairs])
+                predict_flag = np.isnan(batch_labels)
+                not_predict_flag = ~predict_flag
+                batch_predictions = np.zeros(len(batch_features))
+                # index 0 is p(not the same)
+                logger.debug("Pairwise classification")
+                if np.any(predict_flag):
+                    if self.nameless_classifier is not None:
+                        batch_predictions[predict_flag] = (
+                            self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
+                            + self.nameless_classifier.predict_proba(
+                                batch_nameless_features[predict_flag, :]
+                            )[  # type: ignore
+                                :, 0
+                            ]
+                        ) / 2
+                    else:
+                        batch_predictions[predict_flag] = self.classifier.predict_proba(
+                            batch_features[predict_flag, :]
+                        )[:, 0]
+                if np.any(not_predict_flag):
+                    batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
+
+                logger.debug("Computing average distances for unassigned papers")
+                papers_to_cluster_to_average_dist: Dict[str, Dict[Any, Tuple[float, int]]] = defaultdict(
+                    lambda: defaultdict(lambda: (0, 0))
+                )
+                for papers_pair, dist in zip(all_pairs, batch_predictions):
+                    unassigned_paper, assigned_paper, _ = papers_pair
+                    if assigned_paper not in cluster_seeds_require:
+                        continue
+                    cluster_id = cluster_seeds_require[assigned_paper]
+                    previous_average, previous_count = papers_to_cluster_to_average_dist[unassigned_paper][cluster_id]
+                    papers_to_cluster_to_average_dist[unassigned_paper][cluster_id] = (
+                        (previous_average * previous_count + dist) / (previous_count + 1),
+                        previous_count + 1,
+                    )
+
+                logger.debug("Assigning unassigned papers")
+                for (
+                    unassigned_paper,
+                    cluster_dists,
+                ) in papers_to_cluster_to_average_dist.items():
+                    best_cluster_id = None
+                    best_dist = float("inf")
+                    for cluster_id, (average_dist, _) in cluster_dists.items():
+                        if average_dist < best_dist and average_dist < self.cluster_model.eps:
+                            best_cluster_id = cluster_id
+                            best_dist = average_dist
+                    if best_cluster_id is None:
+                        singleton_papers.append(unassigned_paper)
+                        continue
+
+                    final_cluster_id = recluster_map.get(best_cluster_id, best_cluster_id)
+                    final_cluster_key = f"{final_cluster_id}"
+                    if is_disallowed_from_cluster(unassigned_paper, block_pred_clusters[final_cluster_key]):
+                        singleton_papers.append(unassigned_paper)
+                    else:
+                        pred_clusters[final_cluster_key].append(unassigned_paper)
+                        block_pred_clusters[final_cluster_key].append(unassigned_paper)
+
+            if len(singleton_papers) > 0:
+                reclustered_output, _ = self.predict({block_key: singleton_papers}, dataset)
+                for new_cluster in reclustered_output.values():
+                    cluster_id = add_new_cluster(new_cluster)
+                    block_pred_clusters[cluster_id].extend(new_cluster)
+
+            inverse_id_map = {}
+            for cluster_id, clustered_papers in block_pred_clusters.items():
+                for clustered_paper_id in clustered_papers:
+                    for identifier in hard_identifiers(clustered_paper_id):
+                        if identifier is not None and identifier not in inverse_id_map:
+                            inverse_id_map[identifier] = cluster_id
+
+            for paper_id in unassigned_null_title_papers:
+                target_cluster_id = None
+                for identifier in hard_identifiers(paper_id):
+                    if identifier is not None and identifier in inverse_id_map:
+                        target_cluster_id = inverse_id_map[identifier]
+                        break
+                if target_cluster_id is None:
+                    target_cluster_id = add_new_cluster([paper_id])
+                    block_pred_clusters[target_cluster_id].append(paper_id)
+                else:
+                    pred_clusters[target_cluster_id].append(paper_id)
+                    block_pred_clusters[target_cluster_id].append(paper_id)
+
+                for identifier in hard_identifiers(paper_id):
+                    if identifier is not None and identifier not in inverse_id_map:
+                        inverse_id_map[identifier] = target_cluster_id
 
         logger.debug("Returning incrementally predicted clusters")
-        return dict(pred_clusters)
+        return self._merge_clusters_by_hard_ids(dict(pred_clusters), dataset)
 
 
 class PairwiseModeler:
@@ -979,7 +1191,7 @@ class VotingClassifier:
             Weighted average probability for each class per sample.
         """
         if self.voting == "hard":
-            raise AttributeError("predict_proba is not available when" " voting=%r" % self.voting)
+            raise AttributeError("predict_proba is not available when voting=%r" % self.voting)
         avg = np.average(self._collect_probas(X), axis=0, weights=self.weights)
         return avg
 

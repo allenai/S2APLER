@@ -1,10 +1,8 @@
 import unittest
-import pytest
 import numpy as np
 
 from s2apler.data import PDData
 from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
-from s2apler.consts import LARGE_INTEGER
 
 
 class TestData(unittest.TestCase):
@@ -58,8 +56,6 @@ class TestData(unittest.TestCase):
 
         # single thread
         features, labels, _ = many_pairs_featurize(test_pairs, self.dataset, self.featurizer, 1, False, 1, nan_value=-1)
-        # multi thread: currently broken???
-        # TODO: fix the multithreading global issue...
         features, _, _ = many_pairs_featurize(test_pairs, self.dataset, self.featurizer, 2, False, 1, nan_value=-1)
 
         expected_features_1 = [
@@ -125,3 +121,32 @@ class TestData(unittest.TestCase):
         self.check_features_array_equal(list(features[0, :]), expected_features_1)
         self.check_features_array_equal(list(features[1, :]), expected_features_2)
         self.check_features_array_equal(list(features[2, :]), expected_features_3)
+
+    def test_many_pairs_featurize_multiprocessing_initializes_worker_dataset(self):
+        papers = {
+            str(i): {
+                "title": f"Shared block paper {i}",
+                "abstract": f"Abstract {i}",
+                "authors": [{"first": "A", "last": f"Author{i}"}],
+                "venue": "Venue",
+                "journal_name": "Venue",
+                "year": 2020,
+                "source": "PubMed",
+                "block": "shared",
+            }
+            for i in range(46)
+        }
+        dataset = PDData(papers=papers, name="multiprocessing_test", mode="inference", n_jobs=1)
+        paper_ids = list(dataset.papers.keys())
+        pairs = [
+            (paper_ids[i], paper_ids[j], np.nan)
+            for i in range(len(paper_ids))
+            for j in range(i + 1, len(paper_ids))
+        ]
+        featurizer = FeaturizationInfo(features_to_use=["title_similarity"])
+
+        serial_features, _, _ = many_pairs_featurize(pairs, dataset, featurizer, 1, False, 100, nan_value=-1)
+        parallel_features, _, _ = many_pairs_featurize(pairs, dataset, featurizer, 2, False, 100, nan_value=-1)
+
+        assert len(pairs) > 1000
+        np.testing.assert_allclose(parallel_features, serial_features)

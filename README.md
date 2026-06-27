@@ -15,28 +15,11 @@ To install this package, run the following:
 ```bash
 git clone https://github.com/allenai/S2APLER.git
 cd S2APLER
-conda create -y --name s2apler python==3.8.15
-conda activate s2apler
-pip install -r requirements.in
-pip install -e .
-```
-
-If you run into cryptic errors about GCC on macOS while installing the requirments, try this instead:
-
-```bash
-CFLAGS='-stdlib=libc++' pip install -r requirements.in
-```
-
-Alternatively, you can use `uv`:
-
-```bash
-git clone https://github.com/allenai/S2APLER.git
-cd S2APLER
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv python install 3.11
 uv sync
-uv pip install -e .
 ```
+
+S2APLER supports Python 3.11.
 
 ## Data
 
@@ -46,6 +29,36 @@ To obtain the paper clustering dataset, run the following command after the pack
 `aws s3 sync --no-sign-request s3://ai2-s2-research-public/paper_clustering data/`
 
 Note that this software package comes with tools specifically designed to access and model the dataset.
+
+### Arrow data
+
+S2APLER can also load an indexed Arrow bundle instead of `papers.json` and `clusters.json`.
+Convert the downloaded JSON data with:
+
+```bash
+uv run python scripts/convert_to_arrow.py \
+  --papers data/papers.json \
+  --clusters data/clusters.json \
+  --output-dir data/arrow \
+  --overwrite
+```
+
+Then pass the Arrow bundle directory anywhere you would normally pass the JSON data paths:
+
+```python
+from s2apler.data import PDData
+
+dataset = PDData(
+    "data/arrow",
+    clusters="data/arrow",
+    name="paper_clustering_dataset",
+    balanced_pair_sample=False,
+)
+```
+
+Passing `"data/arrow"` as `papers` loads the full paper dataset, matching JSON behavior.
+Clusters are explicit, also matching JSON: pass `clusters="data/arrow"` when you want cluster memberships.
+The exact Arrow bundle layout and schema are documented in [docs/arrow_format.md](docs/arrow_format.md).
 
 ## Evaluation Performance
 The pairwise model has this performance on the test set: 

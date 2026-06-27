@@ -127,6 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+scratch/
+data/clusters.json
+data/papers.json
+data/arrow/
 
 *.pickle
 .vscode

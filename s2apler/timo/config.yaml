@@ -25,7 +25,7 @@ model_variants:
     # Full S3 path to tar.gz'ed artifacts archive, nullable
     artifacts_s3_path: s3://ai2-s2-research-public/paper_clustering_artifacts.tar.gz
 
-    # Version of python required for model runtime, e.g. 3.7, 3.8, 3.9
+    # Version of python required for model runtime.
     python_version: "3.11"
 
     # Whether this model supports CUDA GPU acceleration
@@ -66,7 +66,7 @@ model_variants:
     # Full S3 path to tar.gz'ed artifacts archive, nullable
     artifacts_s3_path: s3://ai2-s2-research-public/paper_clustering_artifacts_v0_2.tar.gz
 
-    # Version of python required for model runtime, e.g. 3.7, 3.8, 3.9
+    # Version of python required for model runtime.
     python_version: "3.11"
 
     # Whether this model supports CUDA GPU acceleration
