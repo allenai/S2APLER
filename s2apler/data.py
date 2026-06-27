@@ -827,9 +827,9 @@ class PDData:
         -------
         train/val/test pairs, where each pair is (paper_id_1, paper_id_2, label)
         """
-        assert self.train_pairs is not None and self.test_pairs is not None, (
-            "You need to pass in train and test pairs to use this function"
-        )
+        assert (
+            self.train_pairs is not None and self.test_pairs is not None
+        ), "You need to pass in train and test pairs to use this function"
         self.train_pairs.loc[:, "label"] = self.train_pairs["label"].map(
             {"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1}
         )

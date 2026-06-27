@@ -149,3 +149,23 @@ class TestClusterer(unittest.TestCase):
         output, _ = clusterer.predict(dataset.get_blocks(), dataset)
 
         assert cluster_sets(output) == {frozenset({"1"}), frozenset({"2"})}
+
+    def test_predict_with_precomputed_dists_allows_missing_dataset(self):
+        clusterer = Clusterer(
+            featurizer_info=FeaturizationInfo(
+                features_to_use=["year_diff", "title_similarity"]
+            ),
+            classifier=RaisingClassifier(),
+            n_jobs=1,
+            use_cache=False,
+            use_default_constraints_as_supervision=True,
+        )
+
+        output, dists = clusterer.predict(
+            {"block": ["1", "2"]},
+            dataset=None,
+            dists={"block": np.array([0.1])},
+        )
+
+        assert cluster_sets(output) == {frozenset({"1", "2"})}
+        assert np.array_equal(dists["block"], np.array([0.1]))

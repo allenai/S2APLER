@@ -96,9 +96,7 @@ class Clusterer:
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.use_cache = use_cache
-        self.use_default_constraints_as_supervision = (
-            use_default_constraints_as_supervision
-        )
+        self.use_default_constraints_as_supervision = use_default_constraints_as_supervision
         self.dont_merge_cluster_seeds = dont_merge_cluster_seeds
         if cluster_model is None:
             self.cluster_model = FastCluster(linkage="average")
@@ -115,9 +113,7 @@ class Clusterer:
         self.batch_size = batch_size
 
     @staticmethod
-    def filter_blocks(
-        block_dict: Dict[str, List[str]], num_to_keep: Optional[int] = None
-    ) -> Dict[str, List[str]]:
+    def filter_blocks(block_dict: Dict[str, List[str]], num_to_keep: Optional[int] = None) -> Dict[str, List[str]]:
         """
         Filter out blocks of size 1, as they are not useful or train/val
 
@@ -230,9 +226,7 @@ class Clusterer:
             num_pairs += int(block_size * (block_size - 1) / 2)
             if isinstance(self.cluster_model, FastCluster):
                 # flattened pdist style
-                pairwise_proba = np.zeros(
-                    int(block_size * (block_size - 1) / 2), dtype=np.float16
-                )
+                pairwise_proba = np.zeros(int(block_size * (block_size - 1) / 2), dtype=np.float16)
             else:
                 pairwise_proba = np.zeros((block_size, block_size), dtype=np.float16)
             pairwise_probas[block_key] = pairwise_proba
@@ -291,21 +285,17 @@ class Clusterer:
             if np.any(predict_flag):
                 if self.nameless_classifier is not None:
                     batch_predictions[predict_flag] = (
-                        self.classifier.predict_proba(batch_features[predict_flag, :])[
-                            :, 0
-                        ]
+                        self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
                         + self.nameless_classifier.predict_proba(
                             batch_nameless_features[predict_flag, :]  # type: ignore
                         )[:, 0]
                     ) / 2
                 else:
-                    batch_predictions[predict_flag] = self.classifier.predict_proba(
-                        batch_features[predict_flag, :]
-                    )[:, 0]
+                    batch_predictions[predict_flag] = self.classifier.predict_proba(batch_features[predict_flag, :])[
+                        :, 0
+                    ]
             if np.any(not_predict_flag):
-                batch_predictions[not_predict_flag] = (
-                    batch_labels[not_predict_flag] + LARGE_INTEGER
-                )
+                batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
             logger.debug("Starting to make matrices")
             for within_batch_index, prediction in tqdm(
@@ -316,15 +306,11 @@ class Clusterer:
             ):
                 block_key = blocks[within_batch_index]
                 if block_key != prev_block_key:
-                    block_key_start_index = blocks.index(block_key) + (
-                        batch_num * self.batch_size
-                    )
+                    block_key_start_index = blocks.index(block_key) + (batch_num * self.batch_size)
                     pairwise_proba = pairwise_probas[block_key]
 
                 if isinstance(self.cluster_model, FastCluster):
-                    index = (
-                        batch_num * self.batch_size + within_batch_index
-                    ) - block_key_start_index
+                    index = (batch_num * self.batch_size + within_batch_index) - block_key_start_index
 
                     pairwise_proba[index] = prediction
                 else:
@@ -381,10 +367,7 @@ class Clusterer:
             train_block_dict, val_block_dict, _ = dataset.split_cluster_papers()
             # incremental setting uses all the paper_ids in train and val
             # block-wise split uses only validation set for building the clustering model
-            if (
-                dataset.unit_of_data_split == "time"
-                or dataset.unit_of_data_split == "papers"
-            ):
+            if dataset.unit_of_data_split == "time" or dataset.unit_of_data_split == "papers":
                 for block_key, paper_ids in train_block_dict.items():
                     if block_key in val_block_dict:
                         val_block_dict[block_key].extend(paper_ids)
@@ -414,9 +397,7 @@ class Clusterer:
             for val_block_dict, val_cluster_to_papers, val_dists in zip(
                 val_block_dict_list, val_cluster_to_papers_list, val_dists_list
             ):
-                pred_clusters, _ = self.predict(
-                    val_block_dict, dataset=None, dists=val_dists
-                )
+                pred_clusters, _ = self.predict(val_block_dict, dataset=None, dists=val_dists)
                 (
                     _,
                     _,
@@ -531,10 +512,7 @@ class Clusterer:
                 identifier_to_clusters[identifier].append(cluster_id)
 
         parent = {cluster_id: cluster_id for cluster_id in clusters}
-        component_papers = {
-            cluster_id: list(clustered_papers)
-            for cluster_id, clustered_papers in clusters.items()
-        }
+        component_papers = {cluster_id: list(clustered_papers) for cluster_id, clustered_papers in clusters.items()}
 
         def find(cluster_id: str) -> str:
             while parent[cluster_id] != cluster_id:
@@ -570,7 +548,7 @@ class Clusterer:
     def predict(
         self,
         block_dict: Dict[str, List[str]],
-        dataset: PDData,
+        dataset: Optional[PDData],
         dists: Optional[Dict[str, np.array]] = None,
         cluster_model_params: Optional[Dict[str, Any]] = None,
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
@@ -605,7 +583,12 @@ class Clusterer:
 
         pred_clusters = defaultdict(list)
 
+        if dataset is None and dists is None:
+            raise ValueError("dataset is required when dists are not precomputed")
+
         if use_s2_clusters:
+            if dataset is None:
+                raise ValueError("dataset is required when use_s2_clusters=True")
             for _, papers_list in block_dict.items():
                 for _paper in papers_list:
                     s2_cluster_key = dataset.papers[_paper].corpus_paper_id
@@ -615,17 +598,18 @@ class Clusterer:
 
             return dict(pred_clusters), dists
 
-        # we need to remove all the null titles from the block_dict and then reattach them later
-        block_dict_no_null_titles = defaultdict(list)
         block_dict_null_titles = defaultdict(list)
-        for block_key, paper_ids in block_dict.items():
-            for paper_id in paper_ids:
-                title = dataset.papers[paper_id].title
-                if title is None or len(title) == 0:
-                    block_dict_null_titles[block_key].append(paper_id)
-                else:
-                    block_dict_no_null_titles[block_key].append(paper_id)
-        block_dict = dict(block_dict_no_null_titles)
+        if dataset is not None:
+            # we need to remove all the null titles from the block_dict and then reattach them later
+            block_dict_no_null_titles = defaultdict(list)
+            for block_key, paper_ids in block_dict.items():
+                for paper_id in paper_ids:
+                    title = dataset.papers[paper_id].title
+                    if title is None or len(title) == 0:
+                        block_dict_null_titles[block_key].append(paper_id)
+                    else:
+                        block_dict_no_null_titles[block_key].append(paper_id)
+            block_dict = dict(block_dict_no_null_titles)
 
         if dists is None:
             dists = self.make_distance_matrices(
@@ -651,7 +635,7 @@ class Clusterer:
                 for i, loc in enumerate(negative_one_label_locations):
                     labels[loc] = max_label + 1 + i
 
-                if self.use_default_constraints_as_supervision:
+                if dataset is not None and self.use_default_constraints_as_supervision:
                     # at this point it is possible that clusters that have overlapping
                     # dois, pdf_hashes or pmids are STILL not joined together
                     # due to the 0 enforced distance not being enough to outweigh
@@ -662,25 +646,19 @@ class Clusterer:
                         if dataset.papers[paper_id].doi is not None:
                             inverse_id_map[dataset.papers[paper_id].doi].append(label)
                         if dataset.papers[paper_id].pdf_hash is not None:
-                            inverse_id_map[dataset.papers[paper_id].pdf_hash].append(
-                                label
-                            )
+                            inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
                         if dataset.papers[paper_id].pmid is not None:
                             inverse_id_map[dataset.papers[paper_id].pmid].append(label)
 
                     # now join any clusters that have overlapping ids
                     # this is a tad tricky because as we merge clusters, we need to
                     # keep track of where they are going
-                    to_join_sets = [
-                        sorted(val) for val in inverse_id_map.values() if len(val) > 1
-                    ]
+                    to_join_sets = [sorted(val) for val in inverse_id_map.values() if len(val) > 1]
                     mapped_labels = {label: label for label in labels}
                     labels = np.array(labels)
                     for join_set in to_join_sets:
                         for other_label in join_set[1:]:
-                            labels[labels == mapped_labels[other_label]] = (
-                                mapped_labels[join_set[0]]
-                            )
+                            labels[labels == mapped_labels[other_label]] = mapped_labels[join_set[0]]
                             mapped_labels[other_label] = mapped_labels[join_set[0]]
                     labels = list(labels)
             else:
@@ -727,7 +705,13 @@ class Clusterer:
             for paper_id, label in zip(paper_ids_for_block, labels):
                 pred_clusters[str(block_key) + "_" + str(label)].append(paper_id)
 
-        return self._merge_clusters_by_hard_ids(dict(pred_clusters), dataset), dists
+        pred_clusters = dict(pred_clusters)
+        if dataset is not None:
+            pred_clusters = self._merge_clusters_by_hard_ids(
+                pred_clusters,
+                dataset,
+            )
+        return pred_clusters, dists
 
     def predict_incremental(self, block_papers: List[str], dataset: PDData):
         """
@@ -769,9 +753,7 @@ class Clusterer:
         ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
             return self._hard_identifiers_for_paper(dataset, paper_id)
 
-        def is_disallowed_from_cluster(
-            paper_id: str, cluster_papers: List[str]
-        ) -> bool:
+        def is_disallowed_from_cluster(paper_id: str, cluster_papers: List[str]) -> bool:
             return self._is_disallowed_from_cluster(dataset, paper_id, cluster_papers)
 
         block_papers_by_block: Dict[Any, List[str]] = defaultdict(list)
@@ -796,9 +778,7 @@ class Clusterer:
             recluster_map = {}
             cluster_seeds_require = {
                 paper_id: cluster_id
-                for paper_id, cluster_id in copy.deepcopy(
-                    dataset.cluster_seeds_require
-                ).items()
+                for paper_id, cluster_id in copy.deepcopy(dataset.cluster_seeds_require).items()
                 if paper_id in block_paper_set
             }
 
@@ -815,9 +795,7 @@ class Clusterer:
                             cluster_seeds_require_inverse[cluster_num] = []
                         cluster_seeds_require_inverse[cluster_num].append(paper_id)
                     for altered_cluster_num in altered_cluster_nums:
-                        paper_ids_for_cluster_num = cluster_seeds_require_inverse[
-                            altered_cluster_num
-                        ]
+                        paper_ids_for_cluster_num = cluster_seeds_require_inverse[altered_cluster_num]
 
                         # Split the claimed profile using S2APLER predictions, not the passed-in profile seed.
                         reclustered_output, _ = self.predict(
@@ -826,19 +804,11 @@ class Clusterer:
                             incremental_dont_use_cluster_seeds=True,
                         )
                         if len(reclustered_output) > 1:
-                            for i, new_cluster_of_papers in enumerate(
-                                reclustered_output.values()
-                            ):
-                                reclustered_cluster_num = (
-                                    str(altered_cluster_num) + f"_{i}"
-                                )
-                                recluster_map[reclustered_cluster_num] = (
-                                    altered_cluster_num
-                                )
+                            for i, new_cluster_of_papers in enumerate(reclustered_output.values()):
+                                reclustered_cluster_num = str(altered_cluster_num) + f"_{i}"
+                                recluster_map[reclustered_cluster_num] = altered_cluster_num
                                 for reclustered_paper_id in new_cluster_of_papers:
-                                    cluster_seeds_require[reclustered_paper_id] = (
-                                        reclustered_cluster_num
-                                    )
+                                    cluster_seeds_require[reclustered_paper_id] = reclustered_cluster_num
 
             for paper_id, cluster_id in dataset.cluster_seeds_require.items():
                 if paper_id not in block_paper_set:
@@ -847,9 +817,7 @@ class Clusterer:
                 pred_clusters[cluster_key].append(paper_id)
                 block_pred_clusters[cluster_key].append(paper_id)
 
-            assigned_seed_papers = [
-                paper_id for paper_id in cluster_seeds_require if has_title(paper_id)
-            ]
+            assigned_seed_papers = [paper_id for paper_id in cluster_seeds_require if has_title(paper_id)]
             unassigned_title_papers = []
             unassigned_null_title_papers = []
             for paper_id in papers_for_block:
@@ -864,10 +832,7 @@ class Clusterer:
             for cluster_id, clustered_papers in block_pred_clusters.items():
                 for clustered_paper_id in clustered_papers:
                     for identifier in hard_identifiers(clustered_paper_id):
-                        if (
-                            identifier is not None
-                            and identifier not in seed_inverse_id_map
-                        ):
+                        if identifier is not None and identifier not in seed_inverse_id_map:
                             seed_inverse_id_map[identifier] = cluster_id
 
             remaining_unassigned_title_papers = []
@@ -933,9 +898,7 @@ class Clusterer:
                 if np.any(predict_flag):
                     if self.nameless_classifier is not None:
                         batch_predictions[predict_flag] = (
-                            self.classifier.predict_proba(
-                                batch_features[predict_flag, :]
-                            )[:, 0]
+                            self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
                             + self.nameless_classifier.predict_proba(
                                 batch_nameless_features[predict_flag, :]
                             )[  # type: ignore
@@ -947,25 +910,20 @@ class Clusterer:
                             batch_features[predict_flag, :]
                         )[:, 0]
                 if np.any(not_predict_flag):
-                    batch_predictions[not_predict_flag] = (
-                        batch_labels[not_predict_flag] + LARGE_INTEGER
-                    )
+                    batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
                 logger.debug("Computing average distances for unassigned papers")
-                papers_to_cluster_to_average_dist: Dict[
-                    str, Dict[Any, Tuple[float, int]]
-                ] = defaultdict(lambda: defaultdict(lambda: (0, 0)))
+                papers_to_cluster_to_average_dist: Dict[str, Dict[Any, Tuple[float, int]]] = defaultdict(
+                    lambda: defaultdict(lambda: (0, 0))
+                )
                 for papers_pair, dist in zip(all_pairs, batch_predictions):
                     unassigned_paper, assigned_paper, _ = papers_pair
                     if assigned_paper not in cluster_seeds_require:
                         continue
                     cluster_id = cluster_seeds_require[assigned_paper]
-                    previous_average, previous_count = (
-                        papers_to_cluster_to_average_dist[unassigned_paper][cluster_id]
-                    )
+                    previous_average, previous_count = papers_to_cluster_to_average_dist[unassigned_paper][cluster_id]
                     papers_to_cluster_to_average_dist[unassigned_paper][cluster_id] = (
-                        (previous_average * previous_count + dist)
-                        / (previous_count + 1),
+                        (previous_average * previous_count + dist) / (previous_count + 1),
                         previous_count + 1,
                     )
 
@@ -977,32 +935,23 @@ class Clusterer:
                     best_cluster_id = None
                     best_dist = float("inf")
                     for cluster_id, (average_dist, _) in cluster_dists.items():
-                        if (
-                            average_dist < best_dist
-                            and average_dist < self.cluster_model.eps
-                        ):
+                        if average_dist < best_dist and average_dist < self.cluster_model.eps:
                             best_cluster_id = cluster_id
                             best_dist = average_dist
                     if best_cluster_id is None:
                         singleton_papers.append(unassigned_paper)
                         continue
 
-                    final_cluster_id = recluster_map.get(
-                        best_cluster_id, best_cluster_id
-                    )
+                    final_cluster_id = recluster_map.get(best_cluster_id, best_cluster_id)
                     final_cluster_key = f"{final_cluster_id}"
-                    if is_disallowed_from_cluster(
-                        unassigned_paper, block_pred_clusters[final_cluster_key]
-                    ):
+                    if is_disallowed_from_cluster(unassigned_paper, block_pred_clusters[final_cluster_key]):
                         singleton_papers.append(unassigned_paper)
                     else:
                         pred_clusters[final_cluster_key].append(unassigned_paper)
                         block_pred_clusters[final_cluster_key].append(unassigned_paper)
 
             if len(singleton_papers) > 0:
-                reclustered_output, _ = self.predict(
-                    {block_key: singleton_papers}, dataset
-                )
+                reclustered_output, _ = self.predict({block_key: singleton_papers}, dataset)
                 for new_cluster in reclustered_output.values():
                     cluster_id = add_new_cluster(new_cluster)
                     block_pred_clusters[cluster_id].extend(new_cluster)
@@ -1086,9 +1035,7 @@ class PairwiseModeler:
                 "num_leaves": scope.int(hp.qloguniform("num_leaves", 2, 7, 1)),
                 "colsample_bytree": hp.uniform("colsample_bytree", 0.5, 1),
                 "subsample": hp.uniform("subsample", 0.5, 1),
-                "min_child_samples": scope.int(
-                    hp.qloguniform("min_child_samples", 3, 9, 1)
-                ),
+                "min_child_samples": scope.int(hp.qloguniform("min_child_samples", 3, 9, 1)),
                 "min_child_weight": hp.loguniform("min_child_weight", -16, 5),
                 "reg_alpha": hp.loguniform("reg_alpha", -16, 2),
                 "reg_lambda": hp.loguniform("reg_lambda", -16, 2),
@@ -1100,9 +1047,7 @@ class PairwiseModeler:
             self.search_space = search_space
 
         self.monotone_constraints = monotone_constraints
-        if self.monotone_constraints is not None and isinstance(
-            self.estimator, lgb.LGBMClassifier
-        ):
+        if self.monotone_constraints is not None and isinstance(self.estimator, lgb.LGBMClassifier):
             self.estimator.set_params(monotone_constraints=self.monotone_constraints)
             self.estimator.set_params(monotone_constraints_method="advanced")
             self.search_space["monotone_penalty"] = hp.uniform("monotone_penalty", 0, 5)
@@ -1146,9 +1091,7 @@ class PairwiseModeler:
                 self.estimator.set_params(**params)
                 self.estimator.fit(X_train, y_train)
                 y_pred_proba = self.estimator.predict_proba(X_val)[:, 1]
-                return -precision_recall_fscore_support(
-                    y_val, y_pred_proba > 0.5, beta=1.0, average="macro"
-                )[2]
+                return -precision_recall_fscore_support(y_val, y_pred_proba > 0.5, beta=1.0, average="macro")[2]
 
             self.hyperopt_trials_store = Trials()
             _ = fmin(
@@ -1159,9 +1102,7 @@ class PairwiseModeler:
                 trials=self.hyperopt_trials_store,
                 rstate=np.random.default_rng(self.random_state),
             )
-            best_params = space_eval(
-                self.search_space, self.hyperopt_trials_store.argmin
-            )
+            best_params = space_eval(self.search_space, self.hyperopt_trials_store.argmin)
             self.best_params = {k: intify(v) for k, v in best_params.items()}
             self.estimator.set_params(**self.best_params)
         else:
@@ -1250,9 +1191,7 @@ class VotingClassifier:
             Weighted average probability for each class per sample.
         """
         if self.voting == "hard":
-            raise AttributeError(
-                "predict_proba is not available when voting=%r" % self.voting
-            )
+            raise AttributeError("predict_proba is not available when voting=%r" % self.voting)
         avg = np.average(self._collect_probas(X), axis=0, weights=self.weights)
         return avg
 
@@ -1373,9 +1312,7 @@ class FastCluster(TransformerMixin, BaseEstimator):
                 "If you intended to pass in a distance matrix, it must be flattened (1-D)."
             )
         elif len(X.shape) > 2:
-            raise Exception(
-                "The input to fit can only be one-dimensional or two-dimensional."
-            )
+            raise Exception("The input to fit can only be one-dimensional or two-dimensional.")
         Z = linkage(X, self.linkage, preserve_input=self.preserve_input)
         self.labels_ = fcluster(Z, t=self.eps, criterion="distance")
         return self
@@ -1398,6 +1335,4 @@ class FastCluster(TransformerMixin, BaseEstimator):
         return self.labels_
 
     def transform(self, X: np.array):
-        raise Exception(
-            "FastCluster has no inductive mode. Use 'fit' or 'fit_transform' instead."
-        )
+        raise Exception("FastCluster has no inductive mode. Use 'fit' or 'fit_transform' instead.")

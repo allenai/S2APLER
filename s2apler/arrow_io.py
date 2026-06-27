@@ -398,7 +398,8 @@ def _prepare_output_dir(output_dir: Path, *, overwrite: bool) -> None:
     existing_bundle_files = [file_name for file_name in bundle_file_names if (output_dir / file_name).exists()]
     if existing_bundle_files and not overwrite:
         raise FileExistsError(
-            f"Arrow bundle files already exist at {output_dir}: {existing_bundle_files}; pass overwrite=True to replace them"
+            "Arrow bundle files already exist at "
+            f"{output_dir}: {existing_bundle_files}; pass overwrite=True to replace them"
         )
     if overwrite:
         for file_name in bundle_file_names:
