@@ -12,4 +12,5 @@ setuptools.setup(
     url="https://github.com/allenai/S2APLER",
     packages=setuptools.find_packages(),
     install_requires=requirements,  # dependencies specified in requirements.in
+    python_requires=">=3.11,<3.12",
 )

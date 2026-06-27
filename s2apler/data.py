@@ -96,10 +96,10 @@ class PDData:
     The main class for holding our representation of an paper disambiguation data
 
     Input:
-        papers: path to the papers information json file (or the json object)
+        papers: path to the papers information json file, Arrow bundle directory, or the json object
         name: name of the dataset, used for caching computed features
         mode: 'train' or 'inference'; if 'inference', everything related to splitting will be ignored
-        clusters: path to the clusters json file (or the json object)
+        clusters: path to the clusters json file, Arrow bundle directory, or the json object
             - a cluster may span multiple blocks, but we will only consider in-block clusters
             - there will be individual papers that definitely do not belong to any of the known clusters
               but which may or may not cluster with each other.
@@ -159,7 +159,17 @@ class PDData:
         n_jobs: int = 1,
     ):
         logger.debug("loading papers")
-        self.papers = self.maybe_load_json(papers)
+        self.arrow_metadata = None
+        if self.is_arrow_bundle_path(papers):
+            from s2apler.arrow_io import (
+                load_papers_from_arrow,
+                normalize_arrow_bundle_dir,
+            )
+
+            arrow_dir = normalize_arrow_bundle_dir(papers)  # type: ignore[arg-type]
+            self.papers, self.arrow_metadata = load_papers_from_arrow(arrow_dir)
+        else:
+            self.papers = self.maybe_load_json(papers)
 
         # convert dictionary to namedtuples for memory reduction
         for sourced_paper_id, paper in self.papers.items():
@@ -213,7 +223,13 @@ class PDData:
         self.name = name
         self.mode = mode
         logger.debug("loading clusters")
-        self.clusters: Optional[Dict] = self.maybe_load_json(clusters)
+        self.clusters: Optional[Dict]
+        if self.is_arrow_bundle_path(clusters):
+            from s2apler.arrow_io import load_clusters_from_arrow
+
+            self.clusters = load_clusters_from_arrow(clusters, require_clusters=True)  # type: ignore[arg-type]
+        else:
+            self.clusters = self.maybe_load_json(clusters)
         logger.debug("loaded clusters, loading specter")
         self.specter_embeddings = self.maybe_load_specter(specter_embeddings)
         logger.debug("loaded specter, loading cluster seeds")
@@ -279,6 +295,43 @@ class PDData:
         self.papers = preprocess_papers_parallel(self.papers, self.n_jobs)
         logger.debug("preprocessed papers")
 
+    @classmethod
+    def from_arrow(
+        cls,
+        arrow_dir: str,
+        name: str,
+        mode: str = "inference",
+        clusters: bool = False,
+        n_jobs: int = 1,
+        balanced_pair_sample: bool = False,
+        **pddata_kwargs: Any,
+    ) -> Tuple["PDData", Dict[str, Any]]:
+        """Build `PDData` from a complete S2APLER Arrow bundle.
+
+        Args:
+            arrow_dir: Directory containing `manifest.json` and Arrow IPC files.
+            name: Dataset name used by caches and diagnostics.
+            mode: `PDData` mode.
+            clusters: Whether to load cluster memberships from the Arrow bundle.
+            n_jobs: Number of worker processes used by preprocessing.
+            balanced_pair_sample: Passed through to `PDData`.
+            **pddata_kwargs: Additional `PDData` constructor arguments.
+
+        Returns:
+            The constructed dataset and Arrow load metadata.
+        """
+        from s2apler.arrow_io import load_pddata_from_arrow
+
+        return load_pddata_from_arrow(
+            arrow_dir,
+            name=name,
+            mode=mode,
+            clusters=clusters,
+            n_jobs=n_jobs,
+            balanced_pair_sample=balanced_pair_sample,
+            **pddata_kwargs,
+        )
+
     @staticmethod
     def maybe_load_json(path_or_json: Optional[Union[str, Union[List, Dict]]]) -> Any:
         """
@@ -301,7 +354,16 @@ class PDData:
             return path_or_json
 
     @staticmethod
-    def maybe_load_list(path_or_list: Optional[Union[str, list, Set]]) -> Optional[Union[list, Set]]:
+    def is_arrow_bundle_path(path_or_json: Any) -> bool:
+        """Return whether a constructor input points at a S2APLER Arrow bundle."""
+        from s2apler.arrow_io import is_arrow_bundle_path
+
+        return is_arrow_bundle_path(path_or_json)
+
+    @staticmethod
+    def maybe_load_list(
+        path_or_list: Optional[Union[str, list, Set]],
+    ) -> Optional[Union[list, Set]]:
         """
         Either loads a list from a text file or passes through the object
 
@@ -321,7 +383,9 @@ class PDData:
             return path_or_list
 
     @staticmethod
-    def maybe_load_dataframe(path_or_dataframe: Optional[Union[str, pd.DataFrame]]) -> Optional[pd.DataFrame]:
+    def maybe_load_dataframe(
+        path_or_dataframe: Optional[Union[str, pd.DataFrame]],
+    ) -> Optional[pd.DataFrame]:
         """
         Either loads a dataframe from a csv file or passes through the object
 
@@ -334,13 +398,15 @@ class PDData:
         -------
         either the loaded dataframe, or the passed in object
         """
-        if type(path_or_dataframe) == str:
+        if isinstance(path_or_dataframe, str):
             return pd.read_csv(path_or_dataframe, sep=",")
         else:
             return path_or_dataframe
 
     @staticmethod
-    def maybe_load_specter(path_or_pickle: Optional[Union[str, Dict]]) -> Optional[Dict]:
+    def maybe_load_specter(
+        path_or_pickle: Optional[Union[str, Dict]],
+    ) -> Optional[Dict]:
         """
         Either loads a dictionary from a pickle file or passes through the object
 
@@ -761,9 +827,9 @@ class PDData:
         -------
         train/val/test pairs, where each pair is (paper_id_1, paper_id_2, label)
         """
-        assert (
-            self.train_pairs is not None and self.test_pairs is not None
-        ), "You need to pass in train and test pairs to use this function"
+        assert self.train_pairs is not None and self.test_pairs is not None, (
+            "You need to pass in train and test pairs to use this function"
+        )
         self.train_pairs.loc[:, "label"] = self.train_pairs["label"].map(
             {"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1}
         )

@@ -1,11 +1,21 @@
 import unittest
-import pytest
 import numpy as np
 
 from s2apler.data import PDData
 from s2apler.model import Clusterer
 from s2apler.featurizer import FeaturizationInfo
 import lightgbm as lgb
+
+
+class RaisingClassifier:
+    def predict_proba(self, X):
+        raise AssertionError(
+            "single-paper block prediction should not call the classifier"
+        )
+
+
+def cluster_sets(output):
+    return {frozenset(cluster) for cluster in output.values()}
 
 
 class TestClusterer(unittest.TestCase):
@@ -29,17 +39,28 @@ class TestClusterer(unittest.TestCase):
         y_random = np.random.randint(0, 8, 10)
         self.clusterer = Clusterer(
             featurizer_info=featurizer_info,
-            classifier=lgb.LGBMClassifier(random_state=1, data_random_seed=1, feature_fraction_seed=1).fit(
-                X_random, y_random
-            ),
+            classifier=lgb.LGBMClassifier(
+                random_state=1, data_random_seed=1, feature_fraction_seed=1
+            ).fit(X_random, y_random),
             n_jobs=1,
             use_cache=False,
             use_default_constraints_as_supervision=False,
         )
 
     def test_make_distance_matrix_fastcluster(self):
-        block = {"reviewerlistfor": ["84177344", "49188235", "214237506", "217917498", "1473469382"]}
-        partial_supervision = {("84177344", "49188235"): 1.1, ("49188235", "214237506"): 1e-6}
+        block = {
+            "reviewerlistfor": [
+                "84177344",
+                "49188235",
+                "214237506",
+                "217917498",
+                "1473469382",
+            ]
+        }
+        partial_supervision = {
+            ("84177344", "49188235"): 1.1,
+            ("49188235", "214237506"): 1e-6,
+        }
         distance_matrices = self.clusterer.make_distance_matrices(
             block_dict=block,
             dataset=self.dataset,
@@ -59,3 +80,72 @@ class TestClusterer(unittest.TestCase):
         self.assertEqual(distance_matrix[0], np.float16(0.2))
         self.assertEqual(distance_matrix[1], np.float16(0.2))
         self.assertEqual(distance_matrix[4], np.float16(0.2))
+
+    def test_predict_merges_cross_block_hard_ids(self):
+        papers = {
+            "1": {
+                "title": "Paper in block A",
+                "authors": [],
+                "sourced_paper_id": "1",
+                "block": "a",
+                "doi": "10/example",
+            },
+            "2": {
+                "title": "Paper in block B",
+                "authors": [],
+                "sourced_paper_id": "2",
+                "block": "b",
+                "doi": "10/example",
+            },
+        }
+        dataset = PDData(papers, name="cross_block_predict", mode="inference")
+        clusterer = Clusterer(
+            featurizer_info=FeaturizationInfo(
+                features_to_use=["year_diff", "title_similarity"]
+            ),
+            classifier=RaisingClassifier(),
+            n_jobs=1,
+            use_cache=False,
+            use_default_constraints_as_supervision=True,
+        )
+
+        output, _ = clusterer.predict(dataset.get_blocks(), dataset)
+
+        assert cluster_sets(output) == {frozenset({"1", "2"})}
+
+    def test_predict_does_not_merge_disallowed_cross_block_hard_ids(self):
+        papers = {
+            "1": {
+                "title": "Paper in block A",
+                "authors": [],
+                "sourced_paper_id": "1",
+                "block": "a",
+                "doi": "10/example",
+            },
+            "2": {
+                "title": "Paper in block B",
+                "authors": [],
+                "sourced_paper_id": "2",
+                "block": "b",
+                "doi": "10/example",
+            },
+        }
+        dataset = PDData(
+            papers,
+            cluster_seeds={"1": {"2": "disallow"}},
+            name="cross_block_predict_disallow",
+            mode="inference",
+        )
+        clusterer = Clusterer(
+            featurizer_info=FeaturizationInfo(
+                features_to_use=["year_diff", "title_similarity"]
+            ),
+            classifier=RaisingClassifier(),
+            n_jobs=1,
+            use_cache=False,
+            use_default_constraints_as_supervision=True,
+        )
+
+        output, _ = clusterer.predict(dataset.get_blocks(), dataset)
+
+        assert cluster_sets(output) == {frozenset({"1"}), frozenset({"2"})}

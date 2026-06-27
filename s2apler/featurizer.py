@@ -1,15 +1,16 @@
 from typing import Tuple, List, Union, Dict, Callable, Any, Optional
 
 import os
-import multiprocessing
 import json
 import numpy as np
 import functools
 import logging
+import platform
 
 from tqdm import tqdm
 
 from s2apler.data import PDData
+from s2apler.mp import UniversalPool
 from s2apler.consts import (
     CACHE_ROOT,
     FEATURIZER_VERSION,
@@ -446,6 +447,12 @@ def parallel_helper(piece_of_work: Tuple, worker_func: Callable):
     return result
 
 
+def set_global_dataset(dataset_papers: Dict[str, Any]) -> None:
+    """Sets the worker-local paper lookup used by pair featurization."""
+    global global_dataset
+    global_dataset = dataset_papers  # type: ignore
+
+
 def many_pairs_featurize(
     paper_pairs: List[Tuple[str, str, Union[int, float]]],
     dataset: PDData,
@@ -490,7 +497,7 @@ def many_pairs_featurize(
     np.ndarray: the nameless features for all the pairs
     """
     global global_dataset
-    global_dataset = dataset.papers  # type: ignore
+    set_global_dataset(dataset.papers)
 
     cached_features: Dict[str, Any] = {"features": {}}
     cache_changed = False
@@ -542,7 +549,9 @@ def many_pairs_featurize(
     if cache_changed:
         if n_jobs > 1:
             logger.debug(f"Cached changed, doing {len(pieces_of_work)} work in parallel")
-            with multiprocessing.Pool(processes=n_jobs if len(pieces_of_work) > 1000 else 1) as p:
+            worker_count = n_jobs if len(pieces_of_work) > 1000 else 1
+            use_threads = platform.system() in ("Windows", "Darwin")
+            with UniversalPool(processes=worker_count, use_threads=use_threads) as p:
                 _max = len(pieces_of_work)
                 with tqdm(total=_max, desc="Doing work", disable=_max <= 10000) as pbar:
                     for feature_output, index in p.imap(
