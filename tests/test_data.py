@@ -230,3 +230,96 @@ class TestSourceUriConstraint(unittest.TestCase):
             }
         )
         assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+
+
+class TestArxivIdConstraint(unittest.TestCase):
+    """Same arXiv id -> must-merge, even when the two records share no other hard identifier.
+    Motivating case: an arXiv-only record (source=ArXiv, source_id=<id>, doi=None) and a DBLP
+    record for the same paper (doi=10.48550/arXiv.<id>). S2 does not synthesize the arXiv DOI
+    onto arXiv-only records, so without a first-class arXiv-id constraint these fall to the
+    fuzzy model and miss on short titles. See allenai/scholar#41736 and allenai/scholar#41735
+    (the "Olmo 3" duplicate)."""
+
+    @staticmethod
+    def _make_dataset(papers):
+        return PDData(papers=papers, name="t", mode="inference", balanced_pair_sample=False)
+
+    def test_arxiv_source_id_and_arxiv_doi_force_merge(self):
+        # The Olmo 3 case: ArXiv record (source_id, no doi) vs DBLP record (arXiv DataCite doi).
+        dataset = self._make_dataset(
+            {
+                "1": {"title": "Olmo 3", "authors": [], "source": "ArXiv", "source_id": "2512.13961", "block": "olmo"},
+                "2": {
+                    "title": "Olmo 3",
+                    "authors": [],
+                    "source": "DBLP",
+                    "doi": "10.48550/arXiv.2512.13961",
+                    "block": "olmo",
+                },
+            }
+        )
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+
+    def test_arxiv_id_normalization_version_and_case(self):
+        # Version suffix stripped and case-folded so 'ArXiv.2512.13961' == 'source_id 2512.13961v2'.
+        dataset = self._make_dataset(
+            {
+                "1": {"title": "P", "authors": [], "source": "arxiv", "source_id": "2512.13961v2", "block": "p"},
+                "2": {"title": "P", "authors": [], "doi": "10.48550/ARXIV.2512.13961", "block": "p"},
+            }
+        )
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+
+    def test_different_arxiv_ids_do_not_force_merge(self):
+        dataset = self._make_dataset(
+            {
+                "1": {"title": "P", "authors": [], "source": "ArXiv", "source_id": "2512.13961", "block": "p"},
+                "2": {"title": "P", "authors": [], "source": "ArXiv", "source_id": "2401.00001", "block": "p"},
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+
+    def test_arxiv_id_not_derived_from_dblp_source_id(self):
+        # We deliberately do NOT parse the arXiv id out of a DBLP 'journals/corr/abs-...' source_id
+        # (dash-vs-dot ambiguity); the DBLP record's arXiv DataCite doi is the reliable signal.
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "P",
+                    "authors": [],
+                    "source": "DBLP",
+                    "source_id": "journals/corr/abs-2512-13961",
+                    "block": "p",
+                }
+            }
+        )
+        assert dataset.papers["1"].arxiv_id is None
+
+    def test_arxiv_id_is_not_folded_into_doi(self):
+        # Guard against the _strong_signals_disagree regression: deriving an arXiv id must not
+        # populate `doi`, or a preprint and its published version would look like disagreeing DOIs.
+        dataset = self._make_dataset(
+            {"1": {"title": "P", "authors": [], "source": "ArXiv", "source_id": "2512.13961", "block": "p"}}
+        )
+        assert dataset.papers["1"].arxiv_id == "2512.13961"
+        assert dataset.papers["1"].doi is None
+
+    def test_arxiv_preprint_and_published_version_can_still_url_merge(self):
+        # An arXiv preprint (arxiv_id set, doi=None) and its published version (real journal doi)
+        # sharing a URL + title must still merge: the synthetic arXiv identity must not trip
+        # _strong_signals_disagree. See allenai/scholar#41863.
+        url = "https://example.org/paper.pdf"
+        dataset = self._make_dataset(
+            {
+                "1": {
+                    "title": "P",
+                    "authors": [],
+                    "source": "ArXiv",
+                    "source_id": "2512.13961",
+                    "source_uris": [url],
+                    "block": "p",
+                },
+                "2": {"title": "P", "authors": [], "doi": "10.1145/realjournal", "source_uris": [url], "block": "p"},
+            }
+        )
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]

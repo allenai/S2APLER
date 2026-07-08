@@ -1,6 +1,7 @@
 from typing import Optional, Union, Dict, List, Any, Tuple, Set, NamedTuple
 
 import random
+import re
 import json
 import numpy as np
 import pandas as pd
@@ -74,6 +75,46 @@ class Paper(NamedTuple):
     source: Optional[str]
     block: Optional[str]
     source_uris: Optional[List[str]] = None
+    arxiv_id: Optional[str] = None
+
+
+RE_ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
+RE_ARXIV_VERSION = re.compile(r"v\d+$", re.IGNORECASE)
+
+
+def _normalize_arxiv_id(arxiv_id: Optional[str]) -> Optional[str]:
+    """Lowercase and strip a trailing version suffix (e.g. '2512.13961v2' -> '2512.13961')."""
+    if not arxiv_id:
+        return None
+    normalized = RE_ARXIV_VERSION.sub("", arxiv_id.strip().lower())
+    return normalized or None
+
+
+def extract_arxiv_id(
+    source: Optional[str],
+    source_id: Optional[str],
+    doi: Optional[str],
+    explicit: Optional[str] = None,
+) -> Optional[str]:
+    """Derive a normalized arXiv id from (in priority order) an explicit field, the arXiv
+    DataCite DOI '10.48550/arXiv.<id>', or an ArXiv-sourced record's source_id. Returns None if
+    none apply.
+
+    This backs a first-class arXiv-id merge constraint (see get_constraint). It is intentionally
+    kept out of `doi`: S2 does not synthesize the '10.48550/arXiv.<id>' DOI onto arXiv-only
+    records, so an arXiv-only record (source_id=<id>, doi=None) and a DBLP record for the same
+    paper (doi='10.48550/arXiv.<id>') otherwise share no hard identifier. Folding it into `doi`
+    instead would make a preprint and its published version (a real, different DOI) look like
+    disagreeing strong signals -- see `_strong_signals_disagree` / allenai/scholar#41863."""
+    if explicit:
+        return _normalize_arxiv_id(explicit)
+    if doi:
+        match = RE_ARXIV_DOI.match(doi.strip())
+        if match:
+            return _normalize_arxiv_id(match.group(1))
+    if source and source_id and source.lower() == "arxiv":
+        return _normalize_arxiv_id(source_id)
+    return None
 
 
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
@@ -207,6 +248,12 @@ class PDData:
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
                 source_uris=paper.get("source_uris", None),
+                arxiv_id=extract_arxiv_id(
+                    paper.get("source", None),
+                    paper.get("source_id", None),
+                    paper.get("doi", None),
+                    paper.get("arxiv_id", None),
+                ),
             )
         logger.debug("loaded papers")
 
@@ -422,6 +469,12 @@ class PDData:
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif paper_1.pdf_hash is not None and paper_2.pdf_hash is not None and paper_1.pdf_hash == paper_2.pdf_hash:
             # same pdf hash - same paper
+            return CLUSTER_SEEDS_LOOKUP["require"]
+        elif paper_1.arxiv_id is not None and paper_2.arxiv_id is not None and paper_1.arxiv_id == paper_2.arxiv_id:
+            # same arXiv id - same paper. arXiv-only records carry no DOI (S2 does not derive
+            # 10.48550/arXiv.<id>), so an ArXiv record (source_id=<id>) and a DBLP record for the
+            # same paper (doi=10.48550/arXiv.<id>) otherwise share no hard identifier and fall to
+            # the fuzzy model, which misses on short titles (e.g. "Olmo 3"). See allenai/scholar#41736.
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_uris
