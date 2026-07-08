@@ -551,6 +551,8 @@ class Clusterer:
                             inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
                         if dataset.papers[paper_id].pmid is not None:
                             inverse_id_map[dataset.papers[paper_id].pmid].append(label)
+                        if dataset.papers[paper_id].arxiv_id is not None:
+                            inverse_id_map[dataset.papers[paper_id].arxiv_id].append(label)
 
                     # now join any clusters that have overlapping ids
                     # this is a tad tricky because as we merge clusters, we need to
@@ -581,6 +583,8 @@ class Clusterer:
                         inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
                     if dataset.papers[paper_id].pmid is not None:
                         inverse_id_map[dataset.papers[paper_id].pmid].append(label)
+                    if dataset.papers[paper_id].arxiv_id is not None:
+                        inverse_id_map[dataset.papers[paper_id].arxiv_id].append(label)
 
                 labels_for_nulls = []
                 for paper_id in paper_ids_for_nulls:
@@ -589,12 +593,15 @@ class Clusterer:
                     doi = dataset.papers[paper_id].doi
                     pmid = dataset.papers[paper_id].pmid
                     pdf_hash = dataset.papers[paper_id].pdf_hash
+                    arxiv_id = dataset.papers[paper_id].arxiv_id
                     if doi is not None and doi in inverse_id_map:
                         labels_for_nulls.append(inverse_id_map[doi][0])
                     elif pmid is not None and pmid in inverse_id_map:
                         labels_for_nulls.append(inverse_id_map[pmid][0])
                     elif pdf_hash is not None and pdf_hash in inverse_id_map:
                         labels_for_nulls.append(inverse_id_map[pdf_hash][0])
+                    elif arxiv_id is not None and arxiv_id in inverse_id_map:
+                        labels_for_nulls.append(inverse_id_map[arxiv_id][0])
                     else:
                         max_label += 1
                         labels_for_nulls.append(max_label)
