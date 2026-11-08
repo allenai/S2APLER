@@ -29,6 +29,35 @@ from sklearn.exceptions import EfficiencyWarning
 logger = logging.getLogger("s2apler")
 
 
+def _split_null_title_papers(
+    block_dict: Dict[str, List[str]], dataset: PDData
+) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    """Splits each block into titled papers, which the model clusters, and null-title papers.
+
+    Parameters
+    ----------
+    block_dict: Dict[str, List[str]]
+        block key to paper ids
+    dataset: PDData
+        the dataset, which supplies each paper's title
+
+    Returns
+    -------
+    Dict[str, List[str]]: titled paper ids per block, for blocks that have any
+    Dict[str, List[str]]: null-title paper ids per block, for blocks that have any
+    """
+    titled: Dict[str, List[str]] = defaultdict(list)
+    null_titled: Dict[str, List[str]] = defaultdict(list)
+    for block_key, paper_ids in block_dict.items():
+        for paper_id in paper_ids:
+            title = dataset.papers[paper_id].title
+            if title is None or len(title) == 0:
+                null_titled[block_key].append(paper_id)
+            else:
+                titled[block_key].append(paper_id)
+    return dict(titled), dict(null_titled)
+
+
 def _join_clusters_by_ids(
     paper_ids: List[str],
     labels: List[int],
@@ -453,7 +482,9 @@ class Clusterer:
 
             # distance matrix
             if val_dists_precomputed is None:
-                val_dists = self.make_distance_matrices(val_block_dict, dataset)
+                # predict clusters titled papers only, so its distances must cover exactly those.
+                titled_val_block_dict, _ = _split_null_title_papers(val_block_dict, dataset)
+                val_dists = self.make_distance_matrices(titled_val_block_dict, dataset)
             else:
                 val_dists = val_dists_precomputed[dataset.name]
             val_dists_list.append(val_dists)
@@ -493,7 +524,8 @@ class Clusterer:
             algo=partial(tpe.suggest, n_startup_jobs=5),
             max_evals=self.n_iter,
             trials=self.hyperopt_trials_store,
-            rstate=np.random.RandomState(self.random_state),
+            # hyperopt 0.2.7 calls rstate.integers, which only numpy Generators have.
+            rstate=np.random.default_rng(self.random_state),
         )
         # hyperopt has some problems with hp.choice so we need to do this:
         best_params = space_eval(self.search_space, self.hyperopt_trials_store.argmin)
@@ -574,16 +606,8 @@ class Clusterer:
             return dict(pred_clusters), dists
 
         # we need to remove all the null titles from the block_dict and then reattach them later
-        block_dict_no_null_titles = defaultdict(list)
-        block_dict_null_titles = defaultdict(list)
-        for block_key, paper_ids in block_dict.items():
-            for paper_id in paper_ids:
-                title = dataset.papers[paper_id].title
-                if title is None or len(title) == 0:
-                    block_dict_null_titles[block_key].append(paper_id)
-                else:
-                    block_dict_no_null_titles[block_key].append(paper_id)
-        block_dict = dict(block_dict_no_null_titles)
+        block_dict_no_null_titles, block_dict_null_titles = _split_null_title_papers(block_dict, dataset)
+        block_dict = block_dict_no_null_titles
 
         if dists is None:
             dists = self.make_distance_matrices(
@@ -601,6 +625,14 @@ class Clusterer:
             if len(titled_paper_ids) > 1:
                 if block_key not in dists:
                     raise ValueError(f"No distance matrix for block {block_key!r} with {len(titled_paper_ids)} papers")
+                # Distances are read by position, so a matrix built over other papers mislabels silently.
+                n = len(titled_paper_ids)
+                expected_shape = (n * (n - 1) // 2,) if dists[block_key].ndim == 1 else (n, n)
+                if dists[block_key].shape != expected_shape:
+                    raise ValueError(
+                        f"Distance matrix for block {block_key!r} has shape {dists[block_key].shape}, "
+                        f"expected {expected_shape} for its {n} titled papers"
+                    )
                 cluster_model = self.set_params(cluster_model_params, clone_flag=True)
                 with warnings.catch_warnings():
                     # annoying sparse matrix not sorted warning
