@@ -14,6 +14,7 @@ mod counter;
 mod paper_features;
 mod rayon_pool;
 mod text;
+mod text_fast;
 
 use counter::{CounterData, MAX_EXACT_COUNT};
 use paper_features::{pair_features, PaperRecord, NUM_FEATURES};

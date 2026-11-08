@@ -4,6 +4,8 @@
 //! compare characters, as s2and's do. The two agree on ASCII, and S2APLER's normalized titles
 //! are ASCII: `normalize_text` transliterates with unidecode and keeps only [a-z0-9] and spaces.
 
+use crate::text_fast;
+
 pub(crate) fn py_len(s: &str) -> usize {
     // Python len() semantics for str: count of Unicode scalar values
     s.chars().count()
@@ -196,6 +198,16 @@ pub(crate) fn year_diff_capped(year1: Option<f64>, year2: Option<f64>, cap: f64)
 pub(crate) fn name_text_features(n1: &str, n2: &str) -> [f64; 3] {
     if !py_len_above_one(n1) || !py_len_above_one(n2) {
         return [f64::NAN; 3];
+    }
+    if n1.is_ascii() && n2.is_ascii() {
+        // Normalized titles are ASCII; the byte versions return identical values much faster.
+        let (b1, b2) = (n1.as_bytes(), n2.as_bytes());
+        let lev = text_fast::levenshtein_ascii(b1, b2) as f64 / (b1.len().max(b2.len()) as f64);
+        return [
+            lev,
+            text_fast::prefix_dist_ascii(b1, b2),
+            text_fast::jaro_winkler_ascii(b1, b2),
+        ];
     }
     let lev = levenshtein_distance(n1, n2) as f64 / (py_len(n1).max(py_len(n2)) as f64);
     let pref = prefix_dist(n1, n2);
