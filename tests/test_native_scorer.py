@@ -1,3 +1,4 @@
+import os
 import pickle
 
 import lightgbm as lgb
@@ -5,6 +6,8 @@ import numpy as np
 import pytest
 
 from s2apler.native_scorer import NativeLightGBMClassifier
+
+PROD_MODEL = "data/prod_model.pickle"
 
 
 @pytest.fixture(scope="module")
@@ -49,3 +52,56 @@ def test_rejects_non_binary_classifier():
     multi = lgb.LGBMClassifier(n_estimators=5, verbose=-1).fit(rng.random((300, 4)), rng.integers(0, 3, 300))
     with pytest.raises(ValueError, match="binary"):
         NativeLightGBMClassifier.from_lgbm(multi, num_threads=1)
+
+
+def edge_rows(classifier, n_features, seed):
+    """Rows at every split threshold and its neighbours, plus NaN, infinities and near-zero values."""
+    thresholds = []
+    for line in classifier.booster_.model_to_string().splitlines():
+        if line.startswith("threshold="):
+            thresholds += [float(t) for t in line.split("=", 1)[1].split()]
+    thresholds = np.unique(np.array(thresholds))
+    near = np.concatenate([thresholds, np.nextafter(thresholds, np.inf), np.nextafter(thresholds, -np.inf)])
+    specials = np.array([np.nan, np.inf, -np.inf, 0.0, -0.0, 1e-36, -1e-36, 1e-35, -1e-35, 5e-324, 1e300, -1e300])
+    values = np.concatenate([near, specials])
+    rng = np.random.default_rng(seed)
+    return rng.choice(values, size=(20000, n_features))
+
+
+def test_matches_lightgbm_on_splits_without_missing_values():
+    # Training without NaN gives missing-type-None splits, where LightGBM maps NaN to 0.
+    rng = np.random.default_rng(2)
+    X = rng.normal(size=(3000, 6))
+    y = (X[:, 0] + X[:, 1] * X[:, 2] > 0).astype(int)
+    classifier = lgb.LGBMClassifier(n_estimators=40, num_leaves=31, random_state=0, verbose=-1).fit(X, y)
+    native = NativeLightGBMClassifier.from_lgbm(classifier, num_threads=2)
+    rows = edge_rows(classifier, 6, seed=3)
+    assert np.array_equal(native.predict_proba(rows), np.asarray(classifier.predict_proba(rows)))
+
+
+def test_matches_lightgbm_on_edge_values_with_nan_splits(classifier):
+    native = NativeLightGBMClassifier.from_lgbm(classifier, num_threads=2)
+    rows = edge_rows(classifier, 18, seed=4)
+    assert np.array_equal(native.predict_proba(rows), classifier.predict_proba(rows))
+
+
+def test_rejects_prediction_time_early_stopping(classifier):
+    early = pickle.loads(pickle.dumps(classifier))
+    early.set_params(pred_early_stop=True, pred_early_stop_freq=1, pred_early_stop_margin=0.1)
+    with pytest.raises(ValueError, match="pred_early_stop"):
+        NativeLightGBMClassifier.from_lgbm(early, num_threads=1)
+
+
+@pytest.mark.parametrize("num_threads", [0, -1])
+def test_rejects_non_positive_thread_counts(classifier, num_threads):
+    with pytest.raises(ValueError, match="num_threads"):
+        NativeLightGBMClassifier.from_lgbm(classifier, num_threads=num_threads)
+
+
+@pytest.mark.skipif(not os.path.exists(PROD_MODEL), reason="needs the tracked production model")
+def test_matches_lightgbm_on_the_production_model():
+    with open(PROD_MODEL, "rb") as f:
+        production = pickle.load(f)["clusterer"].classifier
+    native = NativeLightGBMClassifier.from_lgbm(production, num_threads=4)
+    rows = edge_rows(production, 18, seed=5)
+    assert np.array_equal(native.predict_proba(rows), production.predict_proba(rows))

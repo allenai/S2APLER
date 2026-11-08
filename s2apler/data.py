@@ -595,8 +595,11 @@ class PDData:
             x.append(block_id)
             y.append(len(papers))
 
+        # scikit-learn 1.4 changed the default to n_init="auto" (one run); keep the old 10 runs
+        # so the same random_seed gives the same block-size groups and splits.
         clustering_model = KMeans(
             n_clusters=self.num_clusters_for_block_size,
+            n_init=10,
             random_state=self.random_seed,
         ).fit(np.array(y).reshape(-1, 1))
         y_group = clustering_model.labels_

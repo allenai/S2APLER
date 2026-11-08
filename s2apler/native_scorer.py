@@ -23,6 +23,8 @@ class NativeLightGBMClassifier:
     """
 
     def __init__(self, model_text: str, num_threads: int):
+        if num_threads < 1:
+            raise ValueError(f"num_threads must be at least 1, got {num_threads}")
         self.model_text = model_text
         self.num_threads = num_threads
         # s2and's loader checks the extension version and raises clearly if it's missing.
@@ -45,6 +47,11 @@ class NativeLightGBMClassifier:
         """
         if list(classifier.classes_) != [0, 1]:
             raise ValueError(f"Expected binary classes [0, 1], got {list(classifier.classes_)}")
+        # LightGBM can stop summing trees early at prediction time; the native booster always
+        # sums every tree, so it would return different probabilities.
+        params = {**(classifier.booster_.params or {}), **classifier.get_params()}
+        if params.get("pred_early_stop"):
+            raise ValueError("pred_early_stop is set; the native booster can't reproduce early-stopped scores")
         return cls(classifier.booster_.model_to_string(), num_threads)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:

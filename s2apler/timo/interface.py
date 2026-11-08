@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Union
 from pydantic import BaseModel, BaseSettings, Field
 from s2apler.data import PDData
 from s2apler.native_scorer import NativeLightGBMClassifier
+from s2and.thread_config import resolve_n_jobs
 
 
 class Author(BaseModel):
@@ -136,9 +137,15 @@ class Predictor:
         # Score with s2and's native booster: bit-identical to LightGBM and much faster.
         # Use the configured n_jobs. A typo (`classifier.n_job`) used to leave LightGBM on the
         # model's pickled n_jobs=16; one native thread takes about as long as those 16 did.
+        # resolve_n_jobs maps -1 to all CPUs, as scikit-learn does; the native scorer needs a count.
+        num_threads = resolve_n_jobs(self._config.n_jobs)
         self.clusterer.classifier = NativeLightGBMClassifier.from_lgbm(
-            self.clusterer.classifier, num_threads=self._config.n_jobs
+            self.clusterer.classifier, num_threads=num_threads
         )
+        if self.clusterer.nameless_classifier is not None:
+            self.clusterer.nameless_classifier = NativeLightGBMClassifier.from_lgbm(
+                self.clusterer.nameless_classifier, num_threads=num_threads
+            )
 
     def predict_one(self, instance: Instance) -> Prediction:
         """

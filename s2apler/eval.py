@@ -272,6 +272,32 @@ def facet_eval(
     )
 
 
+def _positive_class_shap_values(model: Any, X: Optional[np.ndarray]) -> np.ndarray:
+    """Returns SHAP values for class 1 of a binary tree model, shaped (n_samples, n_features).
+
+    shap 0.41 returned one array per class. shap 0.51 returns a single array for binary
+    LightGBM models and an (n_samples, n_features, n_classes) array for some other models.
+
+    Parameters
+    ----------
+    model: Any
+        a fitted tree classifier, or a CalibratedClassifierCV around one
+    X: np.ndarray
+        the feature rows to explain
+
+    Returns
+    -------
+    np.ndarray: the positive-class SHAP values
+    """
+    if isinstance(model, CalibratedClassifierCV):
+        model = model.estimator
+    values = shap.TreeExplainer(model).shap_values(X)
+    if isinstance(values, list):
+        return values[1]
+    values = np.asarray(values)
+    return values[..., 1] if values.ndim == 3 else values
+
+
 def pairwise_eval(
     X: np.ndarray,
     y: np.ndarray,
@@ -381,24 +407,14 @@ def pairwise_eval(
         from s2apler.model import VotingClassifier  # avoid circular import
 
         if isinstance(classifier, VotingClassifier):
-            shap_values_all = []
-            for c in classifier.estimators:
-                if isinstance(c, CalibratedClassifierCV):
-                    shap_values_all.append(shap.TreeExplainer(c.base_estimator).shap_values(X)[1])
-                else:
-                    shap_values_all.append(shap.TreeExplainer(c).shap_values(X)[1])
+            shap_values_all = [_positive_class_shap_values(c, X) for c in classifier.estimators]
             shap_values = [np.mean(shap_values_all, axis=0)]
         elif nameless_classifier is not None:
-            shap_values = []
-            for c, d in [(classifier, X), (nameless_classifier, nameless_X)]:
-                if isinstance(classifier, CalibratedClassifierCV):
-                    shap_values.append(shap.TreeExplainer(c.base_estimator).shap_values(d)[1])
-                else:
-                    shap_values.append(shap.TreeExplainer(c).shap_values(d)[1])
-        elif isinstance(classifier, CalibratedClassifierCV):
-            shap_values = shap.TreeExplainer(classifier.base_estimator).shap_values(X)[1]
+            shap_values = [
+                _positive_class_shap_values(c, d) for c, d in [(classifier, X), (nameless_classifier, nameless_X)]
+            ]
         else:
-            shap_values = shap.TreeExplainer(classifier).shap_values(X)[1]
+            shap_values = _positive_class_shap_values(classifier, X)
 
         if isinstance(shap_values, list):
             for i, (shap_value, feature_names, d) in enumerate(

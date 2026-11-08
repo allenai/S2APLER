@@ -31,7 +31,9 @@ COPY pyproject.toml pyproject.toml
 
 RUN pip install -r requirements.in
 
-COPY setup.py .
-RUN python setup.py develop
+# s2and pins setuptools 78-81, where `setup.py develop` is deprecated; install through
+# pyproject.toml instead. Dependencies are already installed from requirements.in.
+COPY setup.py README.md ./
+RUN pip install --no-deps -e .
 
 CMD [ "/bin/bash" ]
