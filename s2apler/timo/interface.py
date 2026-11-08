@@ -138,14 +138,9 @@ class Predictor:
         # Use the configured n_jobs. A typo (`classifier.n_job`) used to leave LightGBM on the
         # model's pickled n_jobs=16; one native thread takes about as long as those 16 did.
         # resolve_n_jobs maps -1 to all CPUs, as scikit-learn does; the native scorer needs a count.
-        num_threads = resolve_n_jobs(self._config.n_jobs)
         self.clusterer.classifier = NativeLightGBMClassifier.from_lgbm(
-            self.clusterer.classifier, num_threads=num_threads
+            self.clusterer.classifier, num_threads=resolve_n_jobs(self._config.n_jobs)
         )
-        if self.clusterer.nameless_classifier is not None:
-            self.clusterer.nameless_classifier = NativeLightGBMClassifier.from_lgbm(
-                self.clusterer.nameless_classifier, num_threads=num_threads
-            )
 
     def predict_one(self, instance: Instance) -> Prediction:
         """
