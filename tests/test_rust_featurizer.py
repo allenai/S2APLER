@@ -1,5 +1,6 @@
 """The Rust pair featurizer must match `_single_pair_featurize` bit for bit."""
 
+from collections import Counter
 from itertools import combinations
 from types import ModuleType
 
@@ -144,3 +145,44 @@ def test_loader_reports_a_missing_extension():
 
     with pytest.raises(RuntimeError, match="not importable"):
         load_s2apler_rust_extension(import_module=missing)
+
+
+def counter_papers(count):
+    papers = {
+        key: {"title": "Same title", "abstract": "x", "authors": [], "block": "b", "year": year}
+        for key, year in [("1", 2001.0), ("2", np.float64(2003)), ("3", 10**20), ("4", None)]
+    }
+    dataset = PDData(papers=papers, name="counts", mode="inference")
+    for paper_id, paper in dataset.papers.items():
+        dataset.papers[paper_id] = paper._replace(abstract_ngrams_words=Counter({"x": count, "y": 3}))
+    return dataset
+
+
+@pytest.mark.parametrize("count", [2**24 + 1, 2**32 + 7])
+def test_matches_python_for_huge_counts_and_float_years(count):
+    dataset = counter_papers(count)
+    pairs = list(combinations(sorted(dataset.papers), 2))
+    assert_bit_identical(python_features(dataset, pairs), rust_pair_features(dataset.papers, pairs, 1))
+
+
+@pytest.mark.parametrize("n_jobs", [-1, 0, 1, 3])
+def test_matches_python_for_every_thread_setting(n_jobs):
+    dataset = edge_dataset()
+    pairs = list(combinations(sorted(dataset.papers), 2))
+    assert_bit_identical(python_features(dataset, pairs), rust_pair_features(dataset.papers, pairs, n_jobs))
+
+
+def test_feature_cache_round_trips(tmp_path, monkeypatch):
+    import s2apler.featurizer as featurizer
+
+    monkeypatch.setattr(featurizer, "CACHE_ROOT", tmp_path)
+    monkeypatch.setattr(featurizer, "CACHED_FEATURES", {})
+    dataset = PDData("tests/test_dataset/papers.json", name="cache_test", mode="inference")
+    pairs = dataset.all_pairs()[:500]
+    info = FeaturizationInfo()
+    fresh = many_pairs_featurize(pairs, dataset, info, 1, True, DEFAULT_CHUNK_SIZE)
+    featurizer.CACHED_FEATURES.clear()
+    from_disk = many_pairs_featurize(pairs, dataset, info, 1, True, DEFAULT_CHUNK_SIZE, backend="python")
+    for first, second in zip(fresh, from_disk):
+        if first is not None:
+            assert_bit_identical(first, second)

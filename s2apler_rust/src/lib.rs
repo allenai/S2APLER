@@ -15,7 +15,7 @@ mod paper_features;
 mod rayon_pool;
 mod text;
 
-use counter::CounterData;
+use counter::{CounterData, MAX_EXACT_COUNT};
 use paper_features::{pair_features, PaperRecord, NUM_FEATURES};
 use rayon_pool::install_with_optional_rayon_pool;
 
@@ -26,7 +26,7 @@ use rayon_pool::install_with_optional_rayon_pool;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-type CounterInput = (Vec<u64>, Vec<u32>);
+type CounterInput = (Vec<u64>, Vec<u64>);
 /// Title tokens, numeral flags, numeral-preceding flags, special words, years, unspaced title.
 type TitleInput = (Vec<u32>, Vec<bool>, Vec<bool>, Vec<u32>, Vec<u32>, String);
 
@@ -36,9 +36,9 @@ type TitleInput = (Vec<u32>, Vec<bool>, Vec<bool>, Vec<u32>, Vec<u32>, String);
 struct PaperInput(
     // Coauthor, venue, title-character and abstract-word n-gram counters.
     (CounterInput, CounterInput, CounterInput, CounterInput),
-    // Author first-letter sets and the year above 1700.
+    // Author first-letter sets and the year above 1700, as a float like Python's `diff` uses.
     Vec<Vec<u32>>,
-    Option<i64>,
+    Option<f64>,
     TitleInput,
     // Has abstract, has authors, has venue, PDF source, publisher source.
     (bool, bool, bool, bool, bool),
@@ -54,18 +54,21 @@ fn counter_from_input((ids, counts): CounterInput) -> PyResult<Option<CounterDat
     if ids.is_empty() {
         return Ok(None);
     }
-    let mut entries: Vec<(u64, u32)> = ids.into_iter().zip(counts).collect();
+    let mut entries: Vec<(u64, u64)> = ids.into_iter().zip(counts).collect();
     entries.sort_unstable_by_key(|entry| entry.0);
     if entries.windows(2).any(|pair| pair[0].0 == pair[1].0) {
         return Err(PyValueError::new_err("counter ids must be unique"));
     }
-    // Sum in integers so the total matches Python's exactly.
-    let sum = entries.iter().map(|entry| entry.1 as u64).sum::<u64>() as f64;
-    let entries = entries
-        .into_iter()
-        .map(|(id, count)| (id, count as f32))
-        .collect();
-    Ok(Some(CounterData::new(entries, sum)))
+    // Python counts are exact integers; refuse any total that f64 could not hold exactly.
+    let total = entries
+        .iter()
+        .try_fold(0u64, |total, entry| total.checked_add(entry.1));
+    if !matches!(total, Some(total) if total < MAX_EXACT_COUNT) {
+        return Err(PyValueError::new_err(
+            "counter counts must total less than 2**53",
+        ));
+    }
+    Ok(Some(CounterData::new(entries)))
 }
 
 fn record_from_input(input: PaperInput) -> PyResult<PaperRecord> {
@@ -149,8 +152,10 @@ impl PaperFeaturizer {
         right: PyReadonlyArray1<'py, u32>,
         num_threads: Option<usize>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-        let left = left.as_slice()?;
-        let right = right.as_slice()?;
+        // Copy the positions while holding the GIL: another thread could change the NumPy
+        // arrays once it is released.
+        let left = left.as_slice()?.to_vec();
+        let right = right.as_slice()?.to_vec();
         if left.len() != right.len() {
             return Err(PyValueError::new_err(
                 "left and right must have the same length",
@@ -159,7 +164,7 @@ impl PaperFeaturizer {
         let paper_count = self.papers.len();
         if let Some(position) = left
             .iter()
-            .chain(right)
+            .chain(&right)
             .find(|position| **position as usize >= paper_count)
         {
             return Err(PyValueError::new_err(format!(
@@ -191,7 +196,6 @@ fn get_build_info(py: Python<'_>) -> PyResult<Py<PyDict>> {
     let build_info = PyDict::new(py);
     build_info.set_item("crate_version", env!("CARGO_PKG_VERSION"))?;
     build_info.set_item("source_digest", env!("S2APLER_RUST_SOURCE_DIGEST"))?;
-    build_info.set_item("profile", option_env!("PROFILE").unwrap_or("unknown"))?;
     build_info.set_item("debug_assertions", cfg!(debug_assertions))?;
     build_info.set_item("num_features", NUM_FEATURES)?;
     Ok(build_info.unbind())

@@ -19,7 +19,7 @@ pub(crate) struct PaperRecord {
     /// Each author's first-letter set, as sorted unique code points.
     pub(crate) author_first_letters: Vec<Vec<u32>>,
     /// The publication year when it is above 1700, else None.
-    pub(crate) year: Option<i64>,
+    pub(crate) year: Option<f64>,
     /// Title tokens (`title.split()`) with whether each is a numeral or a numeral-preceding word.
     pub(crate) title_tokens: Vec<u32>,
     pub(crate) title_token_is_numeral: Vec<bool>,

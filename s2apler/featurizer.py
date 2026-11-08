@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from s2apler.data import PDData, Paper
 from s2apler.runtime import load_s2apler_rust_extension
+from s2and.thread_config import resolve_n_jobs
 from s2apler.consts import (
     CACHE_ROOT,
     FEATURIZER_VERSION,
@@ -500,7 +501,8 @@ def rust_paper_record(paper: Any, intern: _Interner) -> Tuple:
     return (
         counters,
         [[intern(letter) for letter in author.author_info_first_letters] for author in paper.authors],
-        paper.year if paper.year is not None and paper.year > 1700 else None,
+        # A float, as `diff` converts years; JSON training data can hold float years.
+        float(paper.year) if paper.year is not None and paper.year > 1700 else None,
         title,
         flags,
         intern(paper.source) if paper.source is not None else None,
@@ -517,7 +519,7 @@ def rust_pair_features(papers: Dict[str, Paper], pairs: List[Tuple[str, str]], n
     pairs: List[Tuple[str, str]]
         paper id pairs
     n_jobs: int
-        threads to use; values below 1 mean one thread, as the Python path runs serially
+        threads to use; -1 means all CPUs, as for the scorer, and 0 means one thread
 
     Returns
     -------
@@ -531,7 +533,7 @@ def rust_pair_features(papers: Dict[str, Paper], pairs: List[Tuple[str, str]], n
     )
     left = np.fromiter((position[a] for a, _ in pairs), dtype=np.uint32, count=len(pairs))
     right = np.fromiter((position[b] for _, b in pairs), dtype=np.uint32, count=len(pairs))
-    return featurizer.featurize(left, right, num_threads=max(1, n_jobs))
+    return featurizer.featurize(left, right, num_threads=resolve_n_jobs(n_jobs) if n_jobs != 0 else 1)
 
 
 def parallel_helper(piece_of_work: Tuple, worker_func: Callable):

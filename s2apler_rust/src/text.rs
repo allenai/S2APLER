@@ -180,14 +180,13 @@ pub(crate) fn jaro_winkler_similarity(a: &str, b: &str, long_tolerance: bool) ->
     weight
 }
 
-pub(crate) fn year_diff_capped(year1: Option<i64>, year2: Option<i64>, cap: f64) -> f64 {
-    let (Some(y1_raw), Some(y2_raw)) = (year1, year2) else {
+pub(crate) fn year_diff_capped(year1: Option<f64>, year2: Option<f64>, cap: f64) -> f64 {
+    // Adapted from s2and's `year_diff`: years arrive as floats, as S2APLER's `diff` converts
+    // them, and the cap is a parameter.
+    let (Some(y1), Some(y2)) = (year1, year2) else {
         return f64::NAN;
     };
-    let y1 = y1_raw as f64;
-    let y2 = y2_raw as f64;
-    let diff = (y1 - y2).abs();
-    diff.min(cap)
+    (y1 - y2).abs().min(cap)
 }
 
 /// S2APLER's `name_text_features`: normalized Levenshtein, prefix distance and Jaro-Winkler.
@@ -228,8 +227,8 @@ mod tests {
 
     #[test]
     fn year_difference_is_capped() {
-        assert_eq!(year_diff_capped(Some(2001), Some(2020), 5.0), 5.0);
-        assert_eq!(year_diff_capped(Some(2019), Some(2020), 5.0), 1.0);
-        assert!(year_diff_capped(None, Some(2020), 5.0).is_nan());
+        assert_eq!(year_diff_capped(Some(2001.0), Some(2020.0), 5.0), 5.0);
+        assert_eq!(year_diff_capped(Some(2019.0), Some(2020.5), 5.0), 1.5);
+        assert!(year_diff_capped(None, Some(2020.0), 5.0).is_nan());
     }
 }
