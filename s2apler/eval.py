@@ -344,8 +344,8 @@ def pairwise_eval(
 
     plt.figure(0, figsize=(15, 15))
     plt.plot(fpr, tpr, lw=2, label="ROC curve (area = %0.2f)" % roc_auc)
-    plt.xlim([-0.01, 1.0])
-    plt.ylim([0.0, 1.05])
+    plt.xlim((-0.01, 1.0))
+    plt.ylim((0.0, 1.05))
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.title(f"ROC Curve for {title}")

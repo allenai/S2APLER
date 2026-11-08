@@ -940,7 +940,7 @@ class PairwiseModeler:
                 params = {k: intify(v) for k, v in params.items()}
                 self.estimator.set_params(**params)
                 self.estimator.fit(X_train, y_train)
-                y_pred_proba = self.estimator.predict_proba(X_val)[:, 1]
+                y_pred_proba = np.asarray(self.estimator.predict_proba(X_val))[:, 1]
                 return -precision_recall_fscore_support(y_val, y_pred_proba > 0.5, beta=1.0, average="macro")[2]
 
             self.hyperopt_trials_store = Trials()
