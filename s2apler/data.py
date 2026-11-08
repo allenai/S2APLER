@@ -1,6 +1,8 @@
 from typing import Optional, Union, Dict, List, Any, Tuple, Set, NamedTuple
 
 import random
+import re
+import urllib.parse
 import json
 import numpy as np
 import pandas as pd
@@ -76,30 +78,39 @@ class Paper(NamedTuple):
     source_uris: Optional[List[str]] = None
 
 
-DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/", "doi:")
+# Resolver URLs, with or without scheme or host prefix: https://doi.org/, http://dx.doi.org/, doi.org/.
+DOI_URL_PREFIX = re.compile(r"^(?:https?://)?(?:dx\.|www\.)?doi\.org/", re.IGNORECASE)
+# Scheme labels: doi:10.1/a, urn:doi:10.1/a.
+DOI_SCHEME_PREFIX = re.compile(r"^(?:urn:)?doi:\s*", re.IGNORECASE)
 
 
-def _blank_to_none(value: Optional[str]) -> Optional[str]:
-    """Treats a blank identifier as missing, so it can't force unrelated papers together."""
-    if value is None or not value.strip():
+def _blank_to_none(value: Any) -> Optional[str]:
+    """Trims an identifier to a string, treating blanks as missing.
+
+    Blank IDs would otherwise force unrelated papers together. Training data stores some
+    PMIDs as JSON ints, so non-strings are converted rather than rejected.
+    """
+    if value is None:
         return None
-    return value
+    return str(value).strip() or None
 
 
 def normalize_doi(doi: Optional[str]) -> Optional[str]:
-    """Canonicalizes a DOI: trims whitespace, lowercases, and strips resolver prefixes.
+    """Canonicalizes a DOI: trims, strips resolver prefixes, decodes URL escapes, lowercases.
 
-    One work can arrive as "10.1/a" and "https://doi.org/10.1/A". Without this, the two
+    One work can arrive as "10.1/a#b" and "https://doi.org/10.1/A%23b". Without this, the two
     don't match, and a PDF they share looks like it holds two different DOI'd items.
     """
     if doi is None:
         return None
-    doi = doi.strip().lower()
-    for prefix in DOI_PREFIXES:
-        if doi.startswith(prefix):
-            doi = doi[len(prefix) :].strip()
-            break
-    return doi or None
+    doi = doi.strip()
+    url_prefix = DOI_URL_PREFIX.match(doi)
+    if url_prefix:
+        # URLs percent-encode DOI characters such as "#"; a bare DOI may hold a literal "%".
+        doi = urllib.parse.unquote(doi[url_prefix.end() :])
+    else:
+        doi = DOI_SCHEME_PREFIX.sub("", doi, count=1)
+    return doi.strip().lower() or None
 
 
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:

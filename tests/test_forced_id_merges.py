@@ -68,7 +68,21 @@ class TestPdfHashConstraint:
         assert dataset.get_constraint("1", "3") is None
         assert dataset.get_constraint("2", "3") is None
 
-    @pytest.mark.parametrize("variant", ["10.1/ABC", " 10.1/abc ", "https://doi.org/10.1/abc", "doi:10.1/abc"])
+    @pytest.mark.parametrize(
+        "variant",
+        [
+            "10.1/ABC",
+            " 10.1/abc ",
+            "https://doi.org/10.1/abc",
+            "http://dx.doi.org/10.1/abc",
+            "https://www.doi.org/10.1/abc",
+            "doi.org/10.1/abc",
+            "doi:10.1/abc",
+            "DOI: 10.1/abc",
+            "urn:doi:10.1/abc",
+            "https://doi.org/10.1%2Fabc",
+        ],
+    )
     def test_doi_variants_match_and_keep_the_pdf_hash_usable(self, variant):
         dataset = make_dataset(
             {
@@ -80,6 +94,26 @@ class TestPdfHashConstraint:
         assert dataset.multi_doi_pdf_hashes == set()
         assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
         assert dataset.get_constraint("1", "3") == CLUSTER_SEEDS_LOOKUP["require"]
+
+    def test_url_escapes_decode_but_bare_percent_signs_stay(self):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "doi": "https://doi.org/10.1000/res%23test"},
+                "2": {"title": "A", "doi": "10.1000/res%23test"},
+            }
+        )
+        assert dataset.papers["1"].doi == "10.1000/res#test"
+        assert dataset.papers["2"].doi == "10.1000/res%23test"
+
+    def test_int_and_padded_ids_match_their_string_forms(self):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "pmid": 12345},
+                "2": {"title": "B", "pmid": " 12345 "},
+            }
+        )
+        assert dataset.papers["1"].pmid == "12345"
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
 
     @pytest.mark.parametrize("field", ["doi", "pmid", "pdf_hash"])
     def test_blank_ids_do_not_force_merges(self, field):
@@ -179,6 +213,19 @@ class TestPredictIdJoins:
         )
         clusters, _ = make_clusterer().predict({"b": ["1", "2", "3"]}, dataset, dists={})
         assert clusters == {"b_0": ["1", "2"], "b_1": ["3"]}
+
+    def test_null_title_paper_cannot_bridge_titled_clusters(self):
+        # Prod case: a title-less record carries one abstract's DOI and the hash of a PDF that a
+        # different abstract's record also points to. Bridging them would merge two papers.
+        dataset = make_dataset(
+            {
+                "1": {"title": "The relationship between physical activity and fitness", "doi": "10.1249/b"},
+                "2": {"title": "Lower aerobic reserve in older adults", "pdf_hash": "h"},
+                "3": {"title": None, "doi": "10.1249/b", "pdf_hash": "h"},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"b": ["1", "2", "3"]}, dataset, dists={"b": far_apart(2)})
+        assert partition(clusters) == [["1", "3"], ["2"]]
 
     def test_null_title_paper_cannot_bridge_titled_clusters_without_default_constraints(self):
         dataset = make_dataset(

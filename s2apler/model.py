@@ -36,15 +36,18 @@ def _join_clusters_by_ids(
     first_null_label: int,
     join_titled: bool,
 ) -> List[int]:
-    """Joins clusters whose papers share an identifier, transitively.
+    """Joins clusters whose papers share an identifier.
 
-    Union-find replaces an in-place label remap that lost track of earlier joins, which left
-    clusters sharing a DOI, PMID or pdf_hash apart.
+    Titled papers join first, transitively, by union-find. That replaces an in-place label
+    remap that lost track of earlier joins and left clusters sharing an ID apart. Null-title
+    papers then join each other and attach to at most one titled cluster. They never bridge
+    two titled clusters: a title-less record often carries one item's DOI and a multi-item
+    PDF's hash, and bridging would merge distinct papers.
 
     Parameters
     ----------
     paper_ids: List[str]
-        papers in the block
+        papers in the block, titled papers first
     labels: List[int]
         cluster label for each paper; titled papers' labels are below first_null_label,
         and each null-title paper has its own label from first_null_label up
@@ -53,8 +56,7 @@ def _join_clusters_by_ids(
     first_null_label: int
         the smallest label given to a null-title paper
     join_titled: bool
-        whether two titled clusters sharing an identifier join; if False, a null-title
-        paper attaches to at most one titled cluster and never bridges two
+        whether titled clusters sharing an identifier join each other
 
     Returns
     -------
@@ -69,20 +71,21 @@ def _join_clusters_by_ids(
             label = parent[label]
         return label
 
-    def union(label_a: int, label_b: int):
+    def union(label_a: int, label_b: int, may_join_titled: bool):
         root_a, root_b = find(label_a), find(label_b)
         if root_a == root_b:
             return
         # A root below first_null_label means the group already holds a titled cluster.
-        if not join_titled and root_a < first_null_label and root_b < first_null_label:
+        if not may_join_titled and root_a < first_null_label and root_b < first_null_label:
             return
         parent[max(root_a, root_b)] = min(root_a, root_b)
 
     first_label_for_key: Dict[Tuple[str, str], int] = {}
     for paper_id, label in zip(paper_ids, labels):
+        is_titled = label < first_null_label
         for key in dataset.id_merge_keys(paper_id):
             if key in first_label_for_key:
-                union(first_label_for_key[key], label)
+                union(first_label_for_key[key], label, may_join_titled=join_titled and is_titled)
             else:
                 first_label_for_key[key] = label
 
