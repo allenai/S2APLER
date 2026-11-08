@@ -5,7 +5,7 @@ from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
 from s2apler.data import PDData
 from s2apler.consts import LARGE_INTEGER, DEFAULT_CHUNK_SIZE
 
-from typing import Dict, Optional, Any, Union, List, Tuple
+from typing import Dict, Optional, Any, Union, List, Tuple, cast
 from collections import defaultdict
 import warnings
 from functools import partial
@@ -264,7 +264,7 @@ class Clusterer:
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
         disable_tqdm: bool = False,
         incremental_dont_use_cluster_seeds: bool = False,
-    ) -> Dict[str, np.array]:
+    ) -> Dict[str, np.ndarray]:
         """
         Creates the distance matrices for the input blocks.
         Note: This function is much more complicated than it needs to be in an
@@ -406,7 +406,7 @@ class Clusterer:
     def fit(
         self,
         datasets: Union[PDData, List[PDData]],
-        val_dists_precomputed: Dict[str, Dict[str, np.array]] = None,
+        val_dists_precomputed: Optional[Dict[str, Dict[str, np.ndarray]]] = None,
         metric_for_hyperopt: str = "b3",
     ) -> Clusterer:
         """
@@ -465,10 +465,11 @@ class Clusterer:
             self.set_params(params)
             f1s = []
             ratios = []
-            for val_block_dict, val_cluster_to_papers, val_dists in zip(
-                val_block_dict_list, val_cluster_to_papers_list, val_dists_list
+            for dataset, val_block_dict, val_cluster_to_papers, val_dists in zip(
+                datasets, val_block_dict_list, val_cluster_to_papers_list, val_dists_list
             ):
-                pred_clusters, _ = self.predict(val_block_dict, dataset=None, dists=val_dists)
+                # predict reads paper titles to set aside null-title papers, so it needs the dataset.
+                pred_clusters, _ = self.predict(val_block_dict, dataset=dataset, dists=val_dists)
                 (
                     _,
                     _,
@@ -528,7 +529,7 @@ class Clusterer:
         self,
         block_dict: Dict[str, List[str]],
         dataset: PDData,
-        dists: Optional[Dict[str, np.array]] = None,
+        dists: Optional[Dict[str, np.ndarray]] = None,
         cluster_model_params: Optional[Dict[str, Any]] = None,
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
         use_s2_clusters: bool = False,
@@ -783,7 +784,7 @@ class Clusterer:
                 # undo the reclustering step
                 new_name_disallowed = False
                 if best_cluster_id in recluster_map:
-                    best_cluster_id = recluster_map[best_cluster_id]  # type: ignore
+                    best_cluster_id = recluster_map[best_cluster_id]
                 if new_name_disallowed:
                     singleton_papers.append(unassigned_paper)
                 else:
@@ -882,7 +883,7 @@ class PairwiseModeler:
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-    ) -> Trials:
+    ) -> Optional[Trials]:
         """
         Fits the classifier
 
@@ -1102,12 +1103,12 @@ class FastCluster(TransformerMixin, BaseEstimator):
         self.input_as_observation_matrix = input_as_observation_matrix
         self.labels_ = None
 
-    def fit(self, X: np.array) -> np.array:
+    def fit(self, X: np.ndarray) -> "FastCluster":
         """
         Fit the estimator on input data. The results are stored in self.labels_.
         Parameters
         ----------
-        X: np.array
+        X: np.ndarray
             The input may be either a 1-D condensed distance matrix
             or a 2-D array of observation vectors. If X is a 1-D condensed distance
             matrix, then it must be (N choose 2) sized vector, where N is the number
@@ -1134,22 +1135,25 @@ class FastCluster(TransformerMixin, BaseEstimator):
         self.labels_ = fcluster(Z, t=self.eps, criterion="distance")
         return self
 
-    def fit_transform(self, X: np.array) -> np.array:
+    def fit_transform(self, X: np.ndarray, y: Any = None, **fit_params: Any) -> np.ndarray:
         """
         Fit the estimator on input data, and returns results.
         Parameters
         ----------
-        X: np.array
+        X: np.ndarray
             The input may be either a 1-D condensed distance matrix
             or a 2-D array of observation vectors. If X is a 1-D condensed distance
             matrix, then it must be (N choose 2) sized vector, where N is the number
             of original observations paired in the distance matrix.
+        y: Any
+            ignored; present for scikit-learn API compatibility
+        **fit_params: Any
+            ignored; present for scikit-learn API compatibility
         Returns
         -------
-        np.array: A N-length array of clustering labels.
+        np.ndarray: A N-length array of clustering labels.
         """
-        self.fit(X)
-        return self.labels_
+        return cast(np.ndarray, self.fit(X).labels_)
 
-    def transform(self, X: np.array):
+    def transform(self, X: np.ndarray):
         raise Exception("FastCluster has no inductive mode. Use 'fit' or 'fit_transform' instead.")

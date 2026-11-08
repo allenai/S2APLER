@@ -52,9 +52,8 @@ class TestData(unittest.TestCase):
             test_block_dict,
         ) = self.dataset.split_cluster_papers()
         _, _, test_pairs = self.dataset.split_pairs(train_block_dict, val_block_dict, test_block_dict)
-        test_pair_neg_1 = list(test_pairs[0])
-        test_pair_neg_1[-1] = -1
-        test_pairs.append(tuple(test_pair_neg_1))
+        # A negative label marks a pair as partially supervised.
+        test_pairs.append((test_pairs[0][0], test_pairs[0][1], -1))
 
         # single thread
         features, labels, _ = many_pairs_featurize(test_pairs, self.dataset, self.featurizer, 1, False, 1, nan_value=-1)

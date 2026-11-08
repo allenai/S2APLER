@@ -67,7 +67,7 @@ class Paper(NamedTuple):
     author_info_coauthor_email_suffix_n_grams: Optional[Counter]
     author_info_coauthor_affiliations_n_grams: Optional[Counter]
     year: Optional[int]
-    sourced_paper_id: int
+    sourced_paper_id: str
     corpus_paper_id: Optional[int]  # this is the id of the paper's current mapping in the corpus
     doi: Optional[str]
     pmid: Optional[str]
@@ -176,9 +176,9 @@ class PDData:
         specter_embeddings: Optional[Union[str, Dict]] = None,
         cluster_seeds: Optional[Union[str, Dict]] = None,
         altered_cluster_papers: Optional[Union[str, List, Set]] = None,
-        train_pairs: Optional[Union[str, List]] = None,
-        val_pairs: Optional[Union[str, List]] = None,
-        test_pairs: Optional[Union[str, List]] = None,
+        train_pairs: Optional[Union[str, pd.DataFrame]] = None,
+        val_pairs: Optional[Union[str, pd.DataFrame]] = None,
+        test_pairs: Optional[Union[str, pd.DataFrame]] = None,
         train_papers: Optional[Union[str, List]] = None,
         val_papers: Optional[Union[str, List]] = None,
         test_papers: Optional[Union[str, List]] = None,
@@ -293,8 +293,7 @@ class PDData:
         self.all_test_pairs_flag = all_test_pairs_flag
         self.random_seed = random_seed
 
-        if self.clusters is None:
-            self.paper_to_cluster_id = None
+        self.paper_to_cluster_id: Optional[Dict[str, str]] = None
 
         if self.mode == "train":
             if self.clusters is not None:
@@ -412,7 +411,7 @@ class PDData:
         -------
         either the loaded dataframe, or the passed in object
         """
-        if type(path_or_dataframe) == str:
+        if isinstance(path_or_dataframe, str):
             return pd.read_csv(path_or_dataframe, sep=",")
         else:
             return path_or_dataframe
@@ -821,6 +820,7 @@ class PDData:
         -------
         Dict: the dictionary mapping cluster to papers
         """
+        assert self.paper_to_cluster_id is not None, "needs a dataset loaded with clusters in train mode"
         cluster_to_papers = defaultdict(list)
         for papers in block_dict.values():
             for paper in papers:

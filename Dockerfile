@@ -27,6 +27,7 @@ COPY s2apler/ s2apler/
 COPY scripts/ scripts/
 COPY tests/ tests/
 COPY .flake8 .flake8
+COPY pyproject.toml pyproject.toml
 
 RUN pip install -r requirements.in
 
