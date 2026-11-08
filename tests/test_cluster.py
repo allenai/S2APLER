@@ -59,3 +59,45 @@ class TestClusterer(unittest.TestCase):
         self.assertEqual(distance_matrix[0], np.float16(0.2))
         self.assertEqual(distance_matrix[1], np.float16(0.2))
         self.assertEqual(distance_matrix[4], np.float16(0.2))
+
+
+class TestClustererFit(unittest.TestCase):
+    def make_dataset_and_clusterer(self):
+        dataset = PDData(
+            "tests/test_dataset/papers.json",
+            clusters="tests/test_dataset/clusters.json",
+            name="test_dataset",
+            balanced_pair_sample=False,
+        )
+        np.random.seed(1)
+        clusterer = Clusterer(
+            featurizer_info=FeaturizationInfo(features_to_use=["year_diff", "title_similarity"]),
+            classifier=lgb.LGBMClassifier(random_state=1, verbose=-1).fit(
+                np.random.random((10, 8)), np.random.randint(0, 2, 10)
+            ),
+            n_jobs=1,
+            use_cache=False,
+            n_iter=3,
+        )
+        return dataset, clusterer
+
+    def test_fit_tunes_eps(self):
+        dataset, clusterer = self.make_dataset_and_clusterer()
+        clusterer.fit(dataset)
+        assert 0.2 <= clusterer.best_params["eps"] <= 0.8
+
+    def test_fit_aligns_validation_distances_with_titled_papers(self):
+        # predict sets null-title papers aside, so fit's distances must skip them too.
+        # Misaligned distances fail predict's shape check.
+        dataset, clusterer = self.make_dataset_and_clusterer()
+        for i, paper_id in enumerate(sorted(dataset.papers)):
+            if i % 3 == 0:
+                dataset.papers[paper_id] = dataset.papers[paper_id]._replace(title="")
+        clusterer.fit(dataset)
+        assert "eps" in clusterer.best_params
+
+    def test_predict_rejects_distances_for_other_papers(self):
+        dataset, clusterer = self.make_dataset_and_clusterer()
+        block = {"reviewerlistfor": ["84177344", "49188235", "214237506"]}
+        with pytest.raises(ValueError, match="has shape"):
+            clusterer.predict(block, dataset, dists={"reviewerlistfor": np.ones(6, dtype=np.float16)})

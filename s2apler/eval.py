@@ -148,11 +148,13 @@ def incremental_cluster_eval(
 
     partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {}
     list_obs_papers = list(observed_papers)
+    paper_to_cluster_id = dataset.paper_to_cluster_id
+    assert paper_to_cluster_id is not None, "evaluation needs a dataset loaded with clusters in train mode"
     # considers the supervision as distances
     for i, paper_i in enumerate(list_obs_papers):
         for paper_j in list_obs_papers[i + 1 : len(list_obs_papers)]:
-            if dataset.paper_to_cluster_id[paper_i] == dataset.paper_to_cluster_id[paper_j]:
-                if not dataset.paper_to_cluster_id[paper_i].endswith(ORPHAN_CLUSTER_KEY):
+            if paper_to_cluster_id[paper_i] == paper_to_cluster_id[paper_j]:
+                if not paper_to_cluster_id[paper_i].endswith(ORPHAN_CLUSTER_KEY):
                     partial_supervision[(paper_i, paper_j)] = 0
             else:
                 partial_supervision[(paper_i, paper_j)] = 1
@@ -211,6 +213,8 @@ def facet_eval(
 
     # we need to know the length of each cluster
     assert dataset.clusters is not None
+    paper_to_cluster_id = dataset.paper_to_cluster_id
+    assert paper_to_cluster_id is not None
     cluster_len_dict = {}
     for cluster_id, cluster_dict in dataset.clusters.items():
         if not cluster_id.endswith(ORPHAN_CLUSTER_KEY):
@@ -229,7 +233,7 @@ def facet_eval(
 
         _paper_dict = dict()
 
-        cluster_id = dataset.paper_to_cluster_id[sourced_paper_id]
+        cluster_id = paper_to_cluster_id[sourced_paper_id]
         if not cluster_id.endswith(ORPHAN_CLUSTER_KEY):
             paper = dataset.papers[str(sourced_paper_id)]
 
@@ -248,10 +252,10 @@ def facet_eval(
             block_len_f1[block_len_dict[paper.block]].append(f1)
 
             _paper_dict["block size"] = block_len_dict[paper.block]
-            _paper_dict["sourced_paper_id"] = sourced_paper_id  # type: ignore
-            _paper_dict["precision"] = p  # type: ignore
-            _paper_dict["recall"] = r  # type: ignore
-            _paper_dict["f1"] = f1  # type: ignore
+            _paper_dict["sourced_paper_id"] = sourced_paper_id
+            _paper_dict["precision"] = p
+            _paper_dict["recall"] = r
+            _paper_dict["f1"] = f1
             _paper_dict["#authors"] = len(paper.authors)
             _paper_dict["year"] = paper.year
             _paper_dict["cluster size"] = cluster_len_dict[cluster_id]
@@ -269,8 +273,8 @@ def facet_eval(
 
 
 def pairwise_eval(
-    X: np.array,
-    y: np.array,
+    X: np.ndarray,
+    y: np.ndarray,
     classifier: Any,
     figs_path: str,
     title: str,
@@ -278,7 +282,7 @@ def pairwise_eval(
     thresh_for_f1: float = 0.5,
     shap_plot_type: Optional[str] = "dot",
     nameless_classifier: Optional[Any] = None,
-    nameless_X: Optional[np.array] = None,
+    nameless_X: Optional[np.ndarray] = None,
     nameless_feature_names: Optional[List[str]] = None,
     skip_shap: bool = False,
 ) -> Dict[str, float]:
@@ -288,9 +292,9 @@ def pairwise_eval(
 
     Parameters
     ----------
-    X: np.array
+    X: np.ndarray
         Feature matrix of features to do eval on.
-    y: np.array
+    y: np.ndarray
         Feature matrix of labels to do eval on.
     classifier: sklearn compatible classifier
         Classifier to do eval on.
@@ -307,7 +311,7 @@ def pairwise_eval(
         Can also be: 'bar', 'violin', 'compact_dot'
     nameless_classifier: sklearn compatible classifier
         Classifier to do eval on that doesn't use name features.
-    nameless_X: np.array
+    nameless_X: np.ndarray
         Feature matrix of features to do eval on excluding name features.
     nameless_feature_names: List[str]
         List of feature names for the SHAP plots excluding name features.

@@ -5,7 +5,7 @@ from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
 from s2apler.data import PDData
 from s2apler.consts import LARGE_INTEGER, DEFAULT_CHUNK_SIZE
 
-from typing import Dict, Optional, Any, Union, List, Tuple
+from typing import Dict, Optional, Any, Union, List, Tuple, cast
 from collections import defaultdict
 import warnings
 from functools import partial
@@ -27,6 +27,106 @@ from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.exceptions import EfficiencyWarning
 
 logger = logging.getLogger("s2apler")
+
+
+def _split_null_title_papers(
+    block_dict: Dict[str, List[str]], dataset: PDData
+) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    """Splits each block into titled papers, which the model clusters, and null-title papers.
+
+    Parameters
+    ----------
+    block_dict: Dict[str, List[str]]
+        block key to paper ids
+    dataset: PDData
+        the dataset, which supplies each paper's title
+
+    Returns
+    -------
+    Dict[str, List[str]]: titled paper ids per block, for blocks that have any
+    Dict[str, List[str]]: null-title paper ids per block, for blocks that have any
+    """
+    titled: Dict[str, List[str]] = defaultdict(list)
+    null_titled: Dict[str, List[str]] = defaultdict(list)
+    for block_key, paper_ids in block_dict.items():
+        for paper_id in paper_ids:
+            title = dataset.papers[paper_id].title
+            if title is None or len(title) == 0:
+                null_titled[block_key].append(paper_id)
+            else:
+                titled[block_key].append(paper_id)
+    return dict(titled), dict(null_titled)
+
+
+def _join_clusters_by_ids(
+    paper_ids: List[str],
+    labels: List[int],
+    dataset: PDData,
+    first_null_label: int,
+    join_titled: bool,
+) -> List[int]:
+    """Joins clusters whose papers share an identifier.
+
+    Titled papers join first, transitively, by union-find. That replaces an in-place label
+    remap that lost track of earlier joins and left clusters sharing an ID apart. Null-title
+    papers then join each other and attach to at most one titled cluster. They never bridge
+    two titled clusters: a title-less record often carries one item's DOI and a multi-item
+    PDF's hash, and bridging would merge distinct papers.
+
+    Parameters
+    ----------
+    paper_ids: List[str]
+        papers in the block, titled papers first
+    labels: List[int]
+        cluster label for each paper; titled papers' labels are below first_null_label,
+        and each null-title paper has its own label from first_null_label up
+    dataset: PDData
+        the dataset, which supplies each paper's identifiers
+    first_null_label: int
+        the smallest label given to a null-title paper
+    join_titled: bool
+        whether titled clusters sharing an identifier join each other
+
+    Returns
+    -------
+    List[int]: labels where each joined group takes its smallest label, and groups holding
+        only null-title papers are numbered from first_null_label in order of appearance
+    """
+    parent = {label: label for label in labels}
+
+    def find(label: int) -> int:
+        while parent[label] != label:
+            parent[label] = parent[parent[label]]
+            label = parent[label]
+        return label
+
+    def union(label_a: int, label_b: int, may_join_titled: bool):
+        root_a, root_b = find(label_a), find(label_b)
+        if root_a == root_b:
+            return
+        # A root below first_null_label means the group already holds a titled cluster.
+        if not may_join_titled and root_a < first_null_label and root_b < first_null_label:
+            return
+        parent[max(root_a, root_b)] = min(root_a, root_b)
+
+    first_label_for_key: Dict[Tuple[str, str], int] = {}
+    for paper_id, label in zip(paper_ids, labels):
+        is_titled = label < first_null_label
+        for key in dataset.id_merge_keys(paper_id):
+            if key in first_label_for_key:
+                union(first_label_for_key[key], label, may_join_titled=join_titled and is_titled)
+            else:
+                first_label_for_key[key] = label
+
+    # Number null-only groups consecutively, as before, so unchanged clusters keep their keys.
+    renumbered: Dict[int, int] = {}
+    joined = []
+    for label in labels:
+        root = find(label)
+        if root >= first_null_label:
+            root = renumbered.setdefault(root, first_null_label + len(renumbered))
+        joined.append(root)
+    return joined
 
 
 class Clusterer:
@@ -193,7 +293,7 @@ class Clusterer:
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
         disable_tqdm: bool = False,
         incremental_dont_use_cluster_seeds: bool = False,
-    ) -> Dict[str, np.array]:
+    ) -> Dict[str, np.ndarray]:
         """
         Creates the distance matrices for the input blocks.
         Note: This function is much more complicated than it needs to be in an
@@ -335,7 +435,7 @@ class Clusterer:
     def fit(
         self,
         datasets: Union[PDData, List[PDData]],
-        val_dists_precomputed: Dict[str, Dict[str, np.array]] = None,
+        val_dists_precomputed: Optional[Dict[str, Dict[str, np.ndarray]]] = None,
         metric_for_hyperopt: str = "b3",
     ) -> Clusterer:
         """
@@ -382,7 +482,9 @@ class Clusterer:
 
             # distance matrix
             if val_dists_precomputed is None:
-                val_dists = self.make_distance_matrices(val_block_dict, dataset)
+                # predict clusters titled papers only, so its distances must cover exactly those.
+                titled_val_block_dict, _ = _split_null_title_papers(val_block_dict, dataset)
+                val_dists = self.make_distance_matrices(titled_val_block_dict, dataset)
             else:
                 val_dists = val_dists_precomputed[dataset.name]
             val_dists_list.append(val_dists)
@@ -394,10 +496,11 @@ class Clusterer:
             self.set_params(params)
             f1s = []
             ratios = []
-            for val_block_dict, val_cluster_to_papers, val_dists in zip(
-                val_block_dict_list, val_cluster_to_papers_list, val_dists_list
+            for dataset, val_block_dict, val_cluster_to_papers, val_dists in zip(
+                datasets, val_block_dict_list, val_cluster_to_papers_list, val_dists_list
             ):
-                pred_clusters, _ = self.predict(val_block_dict, dataset=None, dists=val_dists)
+                # predict reads paper titles to set aside null-title papers, so it needs the dataset.
+                pred_clusters, _ = self.predict(val_block_dict, dataset=dataset, dists=val_dists)
                 (
                     _,
                     _,
@@ -421,7 +524,8 @@ class Clusterer:
             algo=partial(tpe.suggest, n_startup_jobs=5),
             max_evals=self.n_iter,
             trials=self.hyperopt_trials_store,
-            rstate=np.random.RandomState(self.random_state),
+            # hyperopt 0.2.7 calls rstate.integers, which only numpy Generators have.
+            rstate=np.random.default_rng(self.random_state),
         )
         # hyperopt has some problems with hp.choice so we need to do this:
         best_params = space_eval(self.search_space, self.hyperopt_trials_store.argmin)
@@ -457,7 +561,7 @@ class Clusterer:
         self,
         block_dict: Dict[str, List[str]],
         dataset: PDData,
-        dists: Optional[Dict[str, np.array]] = None,
+        dists: Optional[Dict[str, np.ndarray]] = None,
         cluster_model_params: Optional[Dict[str, Any]] = None,
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
         use_s2_clusters: bool = False,
@@ -502,16 +606,8 @@ class Clusterer:
             return dict(pred_clusters), dists
 
         # we need to remove all the null titles from the block_dict and then reattach them later
-        block_dict_no_null_titles = defaultdict(list)
-        block_dict_null_titles = defaultdict(list)
-        for block_key, paper_ids in block_dict.items():
-            for paper_id in paper_ids:
-                title = dataset.papers[paper_id].title
-                if title is None or len(title) == 0:
-                    block_dict_null_titles[block_key].append(paper_id)
-                else:
-                    block_dict_no_null_titles[block_key].append(paper_id)
-        block_dict = dict(block_dict_no_null_titles)
+        block_dict_no_null_titles, block_dict_null_titles = _split_null_title_papers(block_dict, dataset)
+        block_dict = block_dict_no_null_titles
 
         if dists is None:
             dists = self.make_distance_matrices(
@@ -521,8 +617,22 @@ class Clusterer:
                 incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
             )
 
-        for block_key in block_dict.keys():
-            if block_key in dists and len(block_dict[block_key]) > 1:
+        # Walk every input block, not just blocks with titled papers: a block whose papers all
+        # lack titles used to vanish from the output.
+        all_block_keys = list(dict.fromkeys(list(block_dict_no_null_titles) + list(block_dict_null_titles)))
+        for block_key in all_block_keys:
+            titled_paper_ids = block_dict.get(block_key, [])
+            if len(titled_paper_ids) > 1:
+                if block_key not in dists:
+                    raise ValueError(f"No distance matrix for block {block_key!r} with {len(titled_paper_ids)} papers")
+                # Distances are read by position, so a matrix built over other papers mislabels silently.
+                n = len(titled_paper_ids)
+                expected_shape = (n * (n - 1) // 2,) if dists[block_key].ndim == 1 else (n, n)
+                if dists[block_key].shape != expected_shape:
+                    raise ValueError(
+                        f"Distance matrix for block {block_key!r} has shape {dists[block_key].shape}, "
+                        f"expected {expected_shape} for its {n} titled papers"
+                    )
                 cluster_model = self.set_params(cluster_model_params, clone_flag=True)
                 with warnings.catch_warnings():
                     # annoying sparse matrix not sorted warning
@@ -536,73 +646,25 @@ class Clusterer:
                 negative_one_label_locations = np.where(labels == -1)[0]
                 for i, loc in enumerate(negative_one_label_locations):
                     labels[loc] = max_label + 1 + i
-
-                if self.use_default_constraints_as_supervision:
-                    # at this point it is possible that clusters that have overlapping
-                    # dois, pdf_hashes or pmids are STILL not joined together
-                    # due to the 0 enforced distance not being enough to outweigh
-                    # a lot of large distances. so we manually go through the clusters
-                    # find which ones overlap according to ANY of the ids, and join them
-                    inverse_id_map = defaultdict(list)
-                    for paper_id, label in zip(block_dict[block_key], labels):
-                        if dataset.papers[paper_id].doi is not None:
-                            inverse_id_map[dataset.papers[paper_id].doi].append(label)
-                        if dataset.papers[paper_id].pdf_hash is not None:
-                            inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
-                        if dataset.papers[paper_id].pmid is not None:
-                            inverse_id_map[dataset.papers[paper_id].pmid].append(label)
-
-                    # now join any clusters that have overlapping ids
-                    # this is a tad tricky because as we merge clusters, we need to
-                    # keep track of where they are going
-                    to_join_sets = [sorted(val) for val in inverse_id_map.values() if len(val) > 1]
-                    mapped_labels = {label: label for label in labels}
-                    labels = np.array(labels)
-                    for join_set in to_join_sets:
-                        for other_label in join_set[1:]:
-                            labels[labels == mapped_labels[other_label]] = mapped_labels[join_set[0]]
-                            mapped_labels[other_label] = mapped_labels[join_set[0]]
-                    labels = list(labels)
+                labels = [int(label) for label in labels]
             else:
-                labels = [0]
-                max_label = 0
+                labels = [0] * len(titled_paper_ids)
 
-            # now we can rejoin the null titles based only on the ids
-            paper_ids_for_nulls = block_dict_null_titles.get(block_key, [])
-            if len(paper_ids_for_nulls) > 0:
-                # first we compute a map from various ids to the labels
-                # have to do this again because we reassigned labels above
-                # when joining clusters based on IDs
-                inverse_id_map = defaultdict(list)
-                for paper_id, label in zip(block_dict[block_key], labels):
-                    if dataset.papers[paper_id].doi is not None:
-                        inverse_id_map[dataset.papers[paper_id].doi].append(label)
-                    if dataset.papers[paper_id].pdf_hash is not None:
-                        inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
-                    if dataset.papers[paper_id].pmid is not None:
-                        inverse_id_map[dataset.papers[paper_id].pmid].append(label)
+            # Null-title papers skip the model; each starts as a singleton and joins others by ID.
+            null_title_paper_ids = block_dict_null_titles.get(block_key, [])
+            next_label = max(labels, default=-1) + 1
+            paper_ids_for_block = titled_paper_ids + null_title_paper_ids
+            labels = labels + list(range(next_label, next_label + len(null_title_paper_ids)))
 
-                labels_for_nulls = []
-                for paper_id in paper_ids_for_nulls:
-                    # look up each of the ids of the null title papers in the inverse_id_map
-                    # and assign them the label of the first one we find
-                    doi = dataset.papers[paper_id].doi
-                    pmid = dataset.papers[paper_id].pmid
-                    pdf_hash = dataset.papers[paper_id].pdf_hash
-                    if doi is not None and doi in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[doi][0])
-                    elif pmid is not None and pmid in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[pmid][0])
-                    elif pdf_hash is not None and pdf_hash in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[pdf_hash][0])
-                    else:
-                        max_label += 1
-                        labels_for_nulls.append(max_label)
-
-                paper_ids_for_block = block_dict[block_key] + paper_ids_for_nulls
-                labels = labels + labels_for_nulls
-            else:
-                paper_ids_for_block = block_dict[block_key]
+            # The enforced 0 distance can lose to many large distances under average linkage,
+            # so clusters sharing a DOI, PMID or usable pdf_hash are joined explicitly here.
+            labels = _join_clusters_by_ids(
+                paper_ids_for_block,
+                labels,
+                dataset,
+                first_null_label=next_label,
+                join_titled=self.use_default_constraints_as_supervision,
+            )
 
             for paper_id, label in zip(paper_ids_for_block, labels):
                 pred_clusters[str(block_key) + "_" + str(label)].append(paper_id)
@@ -754,7 +816,7 @@ class Clusterer:
                 # undo the reclustering step
                 new_name_disallowed = False
                 if best_cluster_id in recluster_map:
-                    best_cluster_id = recluster_map[best_cluster_id]  # type: ignore
+                    best_cluster_id = recluster_map[best_cluster_id]
                 if new_name_disallowed:
                     singleton_papers.append(unassigned_paper)
                 else:
@@ -853,7 +915,7 @@ class PairwiseModeler:
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-    ) -> Trials:
+    ) -> Optional[Trials]:
         """
         Fits the classifier
 
@@ -1073,12 +1135,12 @@ class FastCluster(TransformerMixin, BaseEstimator):
         self.input_as_observation_matrix = input_as_observation_matrix
         self.labels_ = None
 
-    def fit(self, X: np.array) -> np.array:
+    def fit(self, X: np.ndarray) -> "FastCluster":
         """
         Fit the estimator on input data. The results are stored in self.labels_.
         Parameters
         ----------
-        X: np.array
+        X: np.ndarray
             The input may be either a 1-D condensed distance matrix
             or a 2-D array of observation vectors. If X is a 1-D condensed distance
             matrix, then it must be (N choose 2) sized vector, where N is the number
@@ -1105,22 +1167,25 @@ class FastCluster(TransformerMixin, BaseEstimator):
         self.labels_ = fcluster(Z, t=self.eps, criterion="distance")
         return self
 
-    def fit_transform(self, X: np.array) -> np.array:
+    def fit_transform(self, X: np.ndarray, y: Any = None, **fit_params: Any) -> np.ndarray:
         """
         Fit the estimator on input data, and returns results.
         Parameters
         ----------
-        X: np.array
+        X: np.ndarray
             The input may be either a 1-D condensed distance matrix
             or a 2-D array of observation vectors. If X is a 1-D condensed distance
             matrix, then it must be (N choose 2) sized vector, where N is the number
             of original observations paired in the distance matrix.
+        y: Any
+            ignored; present for scikit-learn API compatibility
+        **fit_params: Any
+            ignored; present for scikit-learn API compatibility
         Returns
         -------
-        np.array: A N-length array of clustering labels.
+        np.ndarray: A N-length array of clustering labels.
         """
-        self.fit(X)
-        return self.labels_
+        return cast(np.ndarray, self.fit(X).labels_)
 
-    def transform(self, X: np.array):
+    def transform(self, X: np.ndarray):
         raise Exception("FastCluster has no inductive mode. Use 'fit' or 'fit_transform' instead.")

@@ -41,7 +41,7 @@ class TestClusterer(unittest.TestCase):
             cosine_sim(random_vec_1, random_vec_2),
             cosine_similarity(random_vec_1.reshape(1, -1), random_vec_2.reshape(1, -1))[0][0],
         )
-        assert cosine_sim([0] * 1000, random_vec_2) == 0
+        assert cosine_sim(np.zeros(1000), random_vec_2) == 0
 
     def test_get_text_ngrams(self):
         assert Counter() == get_text_ngrams(None)
@@ -122,7 +122,7 @@ class TestClusterer(unittest.TestCase):
         self.assertAlmostEqual(4 / 7, counter_jaccard(Counter([1, 2, 3, 4, 5, 5]), Counter([1, 2, 3, 4, 6])))
 
     def test_jaccard(self):
-        assert np.isnan(jaccard({}, {}))
+        assert np.isnan(jaccard(set(), set()))
         self.assertAlmostEqual(4 / 6, jaccard({1, 2, 3, 4, 5}, {1, 2, 3, 4, 6}))
         self.assertAlmostEqual(4 / 6, jaccard({1, 2, 3, 4, 5, 5}, {1, 2, 3, 4, 6}))
 

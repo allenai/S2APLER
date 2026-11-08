@@ -285,6 +285,16 @@ def compare_author_first_letters(auth_1, auth_2, check_same_len=True, strict_ord
         return all(found_match)
 
 
+# Papers for _single_pair_featurize; a module global keeps them out of every pickled work item.
+global_dataset: Dict[str, Any] = {}
+
+
+def _set_global_dataset(papers: Dict[str, Any]):
+    """Sets the papers that _single_pair_featurize reads in each worker process."""
+    global global_dataset
+    global_dataset = papers
+
+
 def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tuple[List[Union[int, float]], int]:
     """
     Creates the features array for a single paper pair
@@ -311,8 +321,8 @@ def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tupl
     paper_id_1 = work_input[0]
     paper_id_2 = work_input[1]
 
-    paper_1 = global_dataset[str(paper_id_1)]  # type: ignore
-    paper_2 = global_dataset[str(paper_id_2)]  # type: ignore
+    paper_1 = global_dataset[str(paper_id_1)]
+    paper_2 = global_dataset[str(paper_id_2)]
 
     # author-related features
     features.extend(
@@ -490,7 +500,7 @@ def many_pairs_featurize(
     np.ndarray: the nameless features for all the pairs
     """
     global global_dataset
-    global_dataset = dataset.papers  # type: ignore
+    global_dataset = dataset.papers
 
     cached_features: Dict[str, Any] = {"features": {}}
     cache_changed = False
@@ -542,7 +552,13 @@ def many_pairs_featurize(
     if cache_changed:
         if n_jobs > 1:
             logger.debug(f"Cached changed, doing {len(pieces_of_work)} work in parallel")
-            with multiprocessing.Pool(processes=n_jobs if len(pieces_of_work) > 1000 else 1) as p:
+            # Hand workers the papers explicitly: spawn-started workers (Windows, macOS) don't
+            # inherit the module global the way forked workers do.
+            with multiprocessing.Pool(
+                processes=n_jobs if len(pieces_of_work) > 1000 else 1,
+                initializer=_set_global_dataset,
+                initargs=(dataset.papers,),
+            ) as p:
                 _max = len(pieces_of_work)
                 with tqdm(total=_max, desc="Doing work", disable=_max <= 10000) as pbar:
                     for feature_output, index in p.imap(
@@ -671,7 +687,7 @@ def featurize(
                     train_papers_dict,
                     val_papers_dict,
                     test_papers_dict,
-                ) = dataset.split_cluster_papers()  # type: ignore
+                ) = dataset.split_cluster_papers()
 
             train_pairs, val_pairs, test_pairs = dataset.split_pairs(
                 train_papers_dict, val_papers_dict, test_papers_dict

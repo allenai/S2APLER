@@ -1,6 +1,8 @@
 from typing import Optional, Union, Dict, List, Any, Tuple, Set, NamedTuple
 
 import random
+import re
+import urllib.parse
 import json
 import numpy as np
 import pandas as pd
@@ -65,7 +67,7 @@ class Paper(NamedTuple):
     author_info_coauthor_email_suffix_n_grams: Optional[Counter]
     author_info_coauthor_affiliations_n_grams: Optional[Counter]
     year: Optional[int]
-    sourced_paper_id: int
+    sourced_paper_id: str
     corpus_paper_id: Optional[int]  # this is the id of the paper's current mapping in the corpus
     doi: Optional[str]
     pmid: Optional[str]
@@ -74,6 +76,41 @@ class Paper(NamedTuple):
     source: Optional[str]
     block: Optional[str]
     source_uris: Optional[List[str]] = None
+
+
+# Resolver URLs, with or without scheme or host prefix: https://doi.org/, http://dx.doi.org/, doi.org/.
+DOI_URL_PREFIX = re.compile(r"^(?:https?://)?(?:dx\.|www\.)?doi\.org/", re.IGNORECASE)
+# Scheme labels: doi:10.1/a, urn:doi:10.1/a.
+DOI_SCHEME_PREFIX = re.compile(r"^(?:urn:)?doi:\s*", re.IGNORECASE)
+
+
+def _blank_to_none(value: Any) -> Optional[str]:
+    """Trims an identifier to a string, treating blanks as missing.
+
+    Blank IDs would otherwise force unrelated papers together. Training data stores some
+    PMIDs as JSON ints, so non-strings are converted rather than rejected.
+    """
+    if value is None:
+        return None
+    return str(value).strip() or None
+
+
+def normalize_doi(doi: Optional[str]) -> Optional[str]:
+    """Canonicalizes a DOI: trims, strips resolver prefixes, decodes URL escapes, lowercases.
+
+    One work can arrive as "10.1/a#b" and "https://doi.org/10.1/A%23b". Without this, the two
+    don't match, and a PDF they share looks like it holds two different DOI'd items.
+    """
+    if doi is None:
+        return None
+    doi = doi.strip()
+    url_prefix = DOI_URL_PREFIX.match(doi)
+    if url_prefix:
+        # URLs percent-encode DOI characters such as "#"; a bare DOI may hold a literal "%".
+        doi = urllib.parse.unquote(doi[url_prefix.end() :])
+    else:
+        doi = DOI_SCHEME_PREFIX.sub("", doi, count=1)
+    return doi.strip().lower() or None
 
 
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
@@ -139,9 +176,9 @@ class PDData:
         specter_embeddings: Optional[Union[str, Dict]] = None,
         cluster_seeds: Optional[Union[str, Dict]] = None,
         altered_cluster_papers: Optional[Union[str, List, Set]] = None,
-        train_pairs: Optional[Union[str, List]] = None,
-        val_pairs: Optional[Union[str, List]] = None,
-        test_pairs: Optional[Union[str, List]] = None,
+        train_pairs: Optional[Union[str, pd.DataFrame]] = None,
+        val_pairs: Optional[Union[str, pd.DataFrame]] = None,
+        test_pairs: Optional[Union[str, pd.DataFrame]] = None,
         train_papers: Optional[Union[str, List]] = None,
         val_papers: Optional[Union[str, List]] = None,
         test_papers: Optional[Union[str, List]] = None,
@@ -199,11 +236,11 @@ class PDData:
                 author_info_coauthor_affiliations_n_grams=None,
                 year=paper.get("year", None),
                 sourced_paper_id=sourced_paper_id,
-                doi=paper.get("doi", None),
-                pmid=paper.get("pmid", None),
+                doi=normalize_doi(paper.get("doi", None)),
+                pmid=_blank_to_none(paper.get("pmid", None)),
                 source=paper.get("source", None),
                 source_id=paper.get("source_id", None),
-                pdf_hash=paper.get("pdf_hash", None),
+                pdf_hash=_blank_to_none(paper.get("pdf_hash", None)),
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
                 source_uris=paper.get("source_uris", None),
@@ -256,8 +293,7 @@ class PDData:
         self.all_test_pairs_flag = all_test_pairs_flag
         self.random_seed = random_seed
 
-        if self.clusters is None:
-            self.paper_to_cluster_id = None
+        self.paper_to_cluster_id: Optional[Dict[str, str]] = None
 
         if self.mode == "train":
             if self.clusters is not None:
@@ -278,6 +314,47 @@ class PDData:
         logger.debug("preprocessing papers")
         self.papers = preprocess_papers_parallel(self.papers, self.n_jobs)
         logger.debug("preprocessed papers")
+        self.multi_doi_pdf_hashes = self.get_multi_doi_pdf_hashes()
+
+    def get_multi_doi_pdf_hashes(self) -> Set[str]:
+        """Finds pdf_hashes shared by papers that carry different DOIs.
+
+        One PDF often holds several short items: a page of BMJ letters, Nature research
+        highlights, a meeting-abstract supplement. Each item has its own DOI, so a pdf_hash
+        seen with two DOIs names a container, not a paper, and must not force merges.
+        This spans the whole dataset, not one block: a container PDF is one everywhere.
+
+        Returns
+        -------
+        Set[str]: the pdf_hashes that map to more than one distinct DOI
+        """
+        dois_by_hash: Dict[str, Set[str]] = defaultdict(set)
+        for paper in self.papers.values():
+            if paper.pdf_hash is not None and paper.doi is not None:
+                dois_by_hash[paper.pdf_hash].add(paper.doi)
+        return {pdf_hash for pdf_hash, dois in dois_by_hash.items() if len(dois) > 1}
+
+    def id_merge_keys(self, paper_id: str) -> List[Tuple[str, str]]:
+        """Lists the identifiers that force a paper into the same cluster as others.
+
+        Parameters
+        ----------
+        paper_id: string
+            the paper id
+
+        Returns
+        -------
+        List[Tuple[str, str]]: (id type, value) pairs for the DOI, PMID and usable pdf_hash
+        """
+        paper = self.papers[str(paper_id)]
+        keys = []
+        if paper.doi is not None:
+            keys.append(("doi", paper.doi))
+        if paper.pmid is not None:
+            keys.append(("pmid", paper.pmid))
+        if paper.pdf_hash is not None and paper.pdf_hash not in self.multi_doi_pdf_hashes:
+            keys.append(("pdf_hash", paper.pdf_hash))
+        return keys
 
     @staticmethod
     def maybe_load_json(path_or_json: Optional[Union[str, Union[List, Dict]]]) -> Any:
@@ -334,7 +411,7 @@ class PDData:
         -------
         either the loaded dataframe, or the passed in object
         """
-        if type(path_or_dataframe) == str:
+        if isinstance(path_or_dataframe, str):
             return pd.read_csv(path_or_dataframe, sep=",")
         else:
             return path_or_dataframe
@@ -420,8 +497,12 @@ class PDData:
         elif paper_1.pmid is not None and paper_2.pmid is not None and paper_1.pmid == paper_2.pmid:
             # if pmid is the same - same paper
             return CLUSTER_SEEDS_LOOKUP["require"]
-        elif paper_1.pdf_hash is not None and paper_2.pdf_hash is not None and paper_1.pdf_hash == paper_2.pdf_hash:
-            # same pdf hash - same paper
+        elif (
+            paper_1.pdf_hash is not None
+            and paper_1.pdf_hash == paper_2.pdf_hash
+            and paper_1.pdf_hash not in self.multi_doi_pdf_hashes
+        ):
+            # same pdf hash - same paper, unless the PDF holds several DOI'd items
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_uris
@@ -739,6 +820,7 @@ class PDData:
         -------
         Dict: the dictionary mapping cluster to papers
         """
+        assert self.paper_to_cluster_id is not None, "needs a dataset loaded with clusters in train mode"
         cluster_to_papers = defaultdict(list)
         for papers in block_dict.values():
             for paper in papers:
@@ -987,12 +1069,9 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         use_unigrams=True,
         use_bigrams=True,
     )
-    doi = paper.doi.lower() if paper.doi is not None else None
-
     paper = paper._replace(
         authors=authors,
         author_info_coauthor_n_grams=author_info_coauthor_n_grams,
-        doi=doi,
     )
 
     return (key, paper)

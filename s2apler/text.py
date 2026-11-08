@@ -1,12 +1,8 @@
-from typing import List, Union, Optional, Set, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from s2apler.data import NameCounts
+from typing import List, Union, Optional, Set
 
 import re
 import string
 from itertools import zip_longest
-import warnings
 import numpy as np
 import pandas as pd
 import logging
@@ -493,8 +489,8 @@ def normalize_text(text: Optional[str], special_case_apostrophes_and_dashes: boo
     return norm_text
 
 
-def normalize_venue_name(s: str) -> str:
-    if pd.isnull(s) or len(s) == 0:
+def normalize_venue_name(s: Optional[str]) -> str:
+    if s is None or pd.isnull(s) or len(s) == 0:
         return ""
 
     s = unidecode(s)  # Remove diacritics
@@ -513,8 +509,8 @@ def normalize_venue_name(s: str) -> str:
 
 
 def name_text_features(
-    name_1: str,
-    name_2: str,
+    name_1: Optional[str],
+    name_2: Optional[str],
     default_val: float = NUMPY_NAN,
 ) -> List[float]:
     """
@@ -597,13 +593,13 @@ def get_text_ngrams(
     if stopwords is not None:
         text = " ".join([word for word in text.split(" ") if word not in stopwords])
 
-    unigrams = []  # type: ignore
+    unigrams = []
     if use_unigrams:
-        unigrams = filter(lambda x: " " not in x, text)  # type: ignore
+        unigrams = filter(lambda x: " " not in x, text)
 
-    bigrams = []  # type: ignore
+    bigrams = []
     if use_bigrams:
-        bigrams = map(  # type: ignore
+        bigrams = map(
             lambda x: "".join(x),
             filter(lambda x: " " not in x, zip(text, text[1:])),
         )
@@ -833,34 +829,3 @@ def diff(value_1: Optional[float], value_2: Optional[float], default_val: float 
         return default_val
 
     return abs(float(value_1) - float(value_2))
-
-
-def name_counts(
-    counts_1: "NameCounts",
-    counts_2: "NameCounts",
-) -> List[Union[int, float]]:
-    """
-    Gets name counts for first, last, and first_last names.
-    These counts were computed from the entire S2 corpus.
-
-    Parameters
-    ----------
-    counts_1: NameCounts
-        first NameCounts
-    counts_2: NameCounts
-        second NameCounts
-
-    Returns
-    -------
-    List[int]: min/max for first, first_last, and min for last, last_first_initial
-    """
-    counts = []
-    counts.append([counts_1.first, counts_1.first_last, counts_1.last, counts_1.last_first_initial])  # can be nan
-    counts.append([counts_2.first, counts_2.first_last, counts_2.last, counts_2.last_first_initial])  # can be nan
-    # using nanmin so as to catch the min of counts, but regular max to propagate the nan
-    with warnings.catch_warnings():
-        # np.max of 2 nans causes annoying warnings
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        counts_min_max = list(np.nanmin(counts, axis=0)) + list(np.max([counts[0][:2], counts[1][:2]], axis=0))
-
-    return counts_min_max
