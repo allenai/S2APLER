@@ -11,6 +11,7 @@ from os.path import join
 from typing import Optional, List, Dict, Union
 from pydantic import BaseModel, BaseSettings, Field
 from s2apler.data import PDData
+from s2apler.native_scorer import NativeLightGBMClassifier
 
 
 class Author(BaseModel):
@@ -132,7 +133,12 @@ class Predictor:
         self.clusterer.use_default_constraints_as_supervision = self._config.use_default_constraints_as_supervision
         self.clusterer.dont_merge_cluster_seeds = self._config.dont_merge_cluster_seeds
         self.clusterer.n_jobs = self._config.n_jobs
-        self.clusterer.classifier.n_job = self._config.n_jobs
+        # Score with s2and's native booster: bit-identical to LightGBM and much faster.
+        # Keep the pickled classifier's thread count. The old `classifier.n_job = n_jobs` line had
+        # a typo, so LightGBM always scored with the model's own n_jobs, not the config's.
+        self.clusterer.classifier = NativeLightGBMClassifier.from_lgbm(
+            self.clusterer.classifier, num_threads=self.clusterer.classifier.n_jobs
+        )
 
     def predict_one(self, instance: Instance) -> Prediction:
         """
