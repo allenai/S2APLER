@@ -33,7 +33,7 @@ def _join_clusters_by_ids(
     paper_ids: List[str],
     labels: List[int],
     dataset: PDData,
-    n_titled: int,
+    first_null_label: int,
     join_titled: bool,
 ) -> List[int]:
     """Joins clusters whose papers share an identifier, transitively.
@@ -44,19 +44,22 @@ def _join_clusters_by_ids(
     Parameters
     ----------
     paper_ids: List[str]
-        papers in the block; titled papers come first, then null-title papers
+        papers in the block
     labels: List[int]
-        cluster label for each paper
+        cluster label for each paper; titled papers' labels are below first_null_label,
+        and each null-title paper has its own label from first_null_label up
     dataset: PDData
         the dataset, which supplies each paper's identifiers
-    n_titled: int
-        how many of paper_ids are titled papers
+    first_null_label: int
+        the smallest label given to a null-title paper
     join_titled: bool
-        whether two titled papers sharing an identifier join; null-title papers always join
+        whether two titled clusters sharing an identifier join; if False, a null-title
+        paper attaches to at most one titled cluster and never bridges two
 
     Returns
     -------
-    List[int]: labels where each joined group takes its smallest label
+    List[int]: labels where each joined group takes its smallest label, and groups holding
+        only null-title papers are numbered from first_null_label in order of appearance
     """
     parent = {label: label for label in labels}
 
@@ -66,16 +69,32 @@ def _join_clusters_by_ids(
             label = parent[label]
         return label
 
-    first_index_for_key: Dict[Tuple[str, str], int] = {}
-    for index, paper_id in enumerate(paper_ids):
+    def union(label_a: int, label_b: int):
+        root_a, root_b = find(label_a), find(label_b)
+        if root_a == root_b:
+            return
+        # A root below first_null_label means the group already holds a titled cluster.
+        if not join_titled and root_a < first_null_label and root_b < first_null_label:
+            return
+        parent[max(root_a, root_b)] = min(root_a, root_b)
+
+    first_label_for_key: Dict[Tuple[str, str], int] = {}
+    for paper_id, label in zip(paper_ids, labels):
         for key in dataset.id_merge_keys(paper_id):
-            other = first_index_for_key.setdefault(key, index)
-            if other == index or (not join_titled and index < n_titled and other < n_titled):
-                continue
-            root_a, root_b = find(labels[other]), find(labels[index])
-            if root_a != root_b:
-                parent[max(root_a, root_b)] = min(root_a, root_b)
-    return [find(label) for label in labels]
+            if key in first_label_for_key:
+                union(first_label_for_key[key], label)
+            else:
+                first_label_for_key[key] = label
+
+    # Number null-only groups consecutively, as before, so unchanged clusters keep their keys.
+    renumbered: Dict[int, int] = {}
+    joined = []
+    for label in labels:
+        root = find(label)
+        if root >= first_null_label:
+            root = renumbered.setdefault(root, first_null_label + len(renumbered))
+        joined.append(root)
+    return joined
 
 
 class Clusterer:
@@ -575,7 +594,9 @@ class Clusterer:
         all_block_keys = list(dict.fromkeys(list(block_dict_no_null_titles) + list(block_dict_null_titles)))
         for block_key in all_block_keys:
             titled_paper_ids = block_dict.get(block_key, [])
-            if block_key in dists and len(titled_paper_ids) > 1:
+            if len(titled_paper_ids) > 1:
+                if block_key not in dists:
+                    raise ValueError(f"No distance matrix for block {block_key!r} with {len(titled_paper_ids)} papers")
                 cluster_model = self.set_params(cluster_model_params, clone_flag=True)
                 with warnings.catch_warnings():
                     # annoying sparse matrix not sorted warning
@@ -605,7 +626,7 @@ class Clusterer:
                 paper_ids_for_block,
                 labels,
                 dataset,
-                n_titled=len(titled_paper_ids),
+                first_null_label=next_label,
                 join_titled=self.use_default_constraints_as_supervision,
             )
 

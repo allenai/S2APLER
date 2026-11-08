@@ -76,6 +76,32 @@ class Paper(NamedTuple):
     source_uris: Optional[List[str]] = None
 
 
+DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/", "doi:")
+
+
+def _blank_to_none(value: Optional[str]) -> Optional[str]:
+    """Treats a blank identifier as missing, so it can't force unrelated papers together."""
+    if value is None or not value.strip():
+        return None
+    return value
+
+
+def normalize_doi(doi: Optional[str]) -> Optional[str]:
+    """Canonicalizes a DOI: trims whitespace, lowercases, and strips resolver prefixes.
+
+    One work can arrive as "10.1/a" and "https://doi.org/10.1/A". Without this, the two
+    don't match, and a PDF they share looks like it holds two different DOI'd items.
+    """
+    if doi is None:
+        return None
+    doi = doi.strip().lower()
+    for prefix in DOI_PREFIXES:
+        if doi.startswith(prefix):
+            doi = doi[len(prefix) :].strip()
+            break
+    return doi or None
+
+
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
     """True if any of {DOI, PMID, first-author last name} are populated on both
     papers and conflict. Used to gate URL+title-based hard merge: see allenai/scholar#41863."""
@@ -199,11 +225,11 @@ class PDData:
                 author_info_coauthor_affiliations_n_grams=None,
                 year=paper.get("year", None),
                 sourced_paper_id=sourced_paper_id,
-                doi=paper.get("doi", None),
-                pmid=paper.get("pmid", None),
+                doi=normalize_doi(paper.get("doi", None)),
+                pmid=_blank_to_none(paper.get("pmid", None)),
                 source=paper.get("source", None),
                 source_id=paper.get("source_id", None),
-                pdf_hash=paper.get("pdf_hash", None),
+                pdf_hash=_blank_to_none(paper.get("pdf_hash", None)),
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
                 source_uris=paper.get("source_uris", None),
@@ -286,6 +312,7 @@ class PDData:
         One PDF often holds several short items: a page of BMJ letters, Nature research
         highlights, a meeting-abstract supplement. Each item has its own DOI, so a pdf_hash
         seen with two DOIs names a container, not a paper, and must not force merges.
+        This spans the whole dataset, not one block: a container PDF is one everywhere.
 
         Returns
         -------
@@ -1031,12 +1058,9 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         use_unigrams=True,
         use_bigrams=True,
     )
-    doi = paper.doi.lower() if paper.doi is not None else None
-
     paper = paper._replace(
         authors=authors,
         author_info_coauthor_n_grams=author_info_coauthor_n_grams,
-        doi=doi,
     )
 
     return (key, paper)

@@ -12,7 +12,7 @@ from itertools import permutations
 import numpy as np
 import pytest
 
-from s2apler.consts import CLUSTER_SEEDS_LOOKUP
+from s2apler.consts import CLUSTER_SEEDS_LOOKUP, LARGE_INTEGER
 from s2apler.data import PDData
 from s2apler.featurizer import FeaturizationInfo
 from s2apler.model import Clusterer
@@ -25,13 +25,13 @@ def make_dataset(papers):
     return PDData(papers=papers, name="t", mode="inference", balanced_pair_sample=False)
 
 
-def make_clusterer():
+def make_clusterer(use_default_constraints_as_supervision=True):
     # predict() gets precomputed distances, so the classifier is never called.
     return Clusterer(
         featurizer_info=FeaturizationInfo(features_to_use=["year_diff"]),
         classifier=None,
         n_jobs=1,
-        use_default_constraints_as_supervision=True,
+        use_default_constraints_as_supervision=use_default_constraints_as_supervision,
     )
 
 
@@ -68,14 +68,29 @@ class TestPdfHashConstraint:
         assert dataset.get_constraint("1", "3") is None
         assert dataset.get_constraint("2", "3") is None
 
-    def test_doi_case_does_not_make_a_pdf_hash_ambiguous(self):
+    @pytest.mark.parametrize("variant", ["10.1/ABC", " 10.1/abc ", "https://doi.org/10.1/abc", "doi:10.1/abc"])
+    def test_doi_variants_match_and_keep_the_pdf_hash_usable(self, variant):
         dataset = make_dataset(
             {
-                "1": {"title": "A", "pdf_hash": "h", "doi": "10.1/ABC"},
-                "2": {"title": "A", "pdf_hash": "h", "doi": "10.1/abc"},
+                "1": {"title": "A", "pdf_hash": "h", "doi": "10.1/abc"},
+                "2": {"title": "A", "pdf_hash": "h", "doi": variant},
+                "3": {"title": "A", "pdf_hash": "h", "doi": ""},
             }
         )
         assert dataset.multi_doi_pdf_hashes == set()
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+        assert dataset.get_constraint("1", "3") == CLUSTER_SEEDS_LOOKUP["require"]
+
+    @pytest.mark.parametrize("field", ["doi", "pmid", "pdf_hash"])
+    def test_blank_ids_do_not_force_merges(self, field):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", field: ""},
+                "2": {"title": "B", field: "  "},
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+        assert dataset.id_merge_keys("1") == []
 
 
 class TestPredictIdJoins:
@@ -136,3 +151,83 @@ class TestPredictIdJoins:
         )
         clusters, _ = make_clusterer().predict({"b": ["1", "2", "3"]}, dataset, dists={"b": far_apart(2)})
         assert partition(clusters) == [["1"], ["2"], ["3"]]
+
+    @pytest.mark.parametrize("field", ["doi", "pmid", "pdf_hash"])
+    def test_blank_ids_do_not_join_null_title_papers(self, field):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A"},
+                "2": {"title": None, field: ""},
+                "3": {"title": None, field: ""},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"b": ["1", "2", "3"]}, dataset, dists={})
+        assert partition(clusters) == [["1"], ["2"], ["3"]]
+
+    def test_missing_distance_matrix_raises(self):
+        dataset = make_dataset({"1": {"title": "A"}, "2": {"title": "B"}})
+        with pytest.raises(ValueError, match="No distance matrix"):
+            make_clusterer().predict({"b": ["1", "2"]}, dataset, dists={})
+
+    def test_unattached_null_title_papers_keep_their_keys(self):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "doi": "10.1/a"},
+                "2": {"title": None, "doi": "10.1/a"},
+                "3": {"title": None},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"b": ["1", "2", "3"]}, dataset, dists={})
+        assert clusters == {"b_0": ["1", "2"], "b_1": ["3"]}
+
+    def test_null_title_paper_cannot_bridge_titled_clusters_without_default_constraints(self):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "doi": "10.1/x"},
+                "2": {"title": "B", "pmid": "7"},
+                "3": {"title": None, "doi": "10.1/x", "pmid": "7"},
+            }
+        )
+        clusterer = make_clusterer(use_default_constraints_as_supervision=False)
+        clusters, _ = clusterer.predict({"b": ["1", "2", "3"]}, dataset, dists={"b": far_apart(2)})
+        assert partition(clusters) == [["1", "3"], ["2"]]
+
+    def test_all_null_title_block_survives_next_to_titled_block(self):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "block": "x", "doi": "10.1/a"},
+                "2": {"title": "B", "block": "x"},
+                "3": {"title": None, "block": "y", "pdf_hash": "h"},
+                "4": {"title": None, "block": "y", "pdf_hash": "h"},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"x": ["1", "2"], "y": ["3", "4"]}, dataset, dists={"x": far_apart(2)})
+        assert clusters == {"x_1": ["1"], "x_2": ["2"], "y_0": ["3", "4"]}
+
+    def test_multi_doi_pdf_hash_scope_is_dataset_wide(self):
+        # A PDF seen with two DOIs anywhere is a container, so it stops forcing merges in every block.
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "block": "x", "doi": "10.1/a", "pdf_hash": "h"},
+                "2": {"title": "A", "block": "x", "pdf_hash": "h"},
+                "3": {"title": "C", "block": "y", "doi": "10.1/c", "pdf_hash": "h"},
+            }
+        )
+        assert dataset.get_constraint("1", "2") is None
+
+
+class TestDistanceLabels:
+    def test_ambiguous_pdf_hash_pairs_go_to_the_model(self):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "doi": "10.1/a", "pdf_hash": "h"},
+                "2": {"title": "B", "doi": "10.1/b", "pdf_hash": "h"},
+                "3": {"title": "C", "pdf_hash": "g"},
+                "4": {"title": "C", "pdf_hash": "g"},
+            }
+        )
+        rows = make_clusterer().distance_matrix_helper({"b": ["1", "2", "3", "4"]}, dataset, {})
+        labels = {(p1, p2): label for (p1, p2, label), _, _ in rows}
+        # NaN tells make_distance_matrices to ask the classifier; a number is a forced distance.
+        assert np.isnan(labels[("1", "2")])
+        assert labels[("3", "4")] == CLUSTER_SEEDS_LOOKUP["require"] - LARGE_INTEGER
