@@ -29,6 +29,55 @@ from sklearn.exceptions import EfficiencyWarning
 logger = logging.getLogger("s2apler")
 
 
+def _join_clusters_by_ids(
+    paper_ids: List[str],
+    labels: List[int],
+    dataset: PDData,
+    n_titled: int,
+    join_titled: bool,
+) -> List[int]:
+    """Joins clusters whose papers share an identifier, transitively.
+
+    Union-find replaces an in-place label remap that lost track of earlier joins, which left
+    clusters sharing a DOI, PMID or pdf_hash apart.
+
+    Parameters
+    ----------
+    paper_ids: List[str]
+        papers in the block; titled papers come first, then null-title papers
+    labels: List[int]
+        cluster label for each paper
+    dataset: PDData
+        the dataset, which supplies each paper's identifiers
+    n_titled: int
+        how many of paper_ids are titled papers
+    join_titled: bool
+        whether two titled papers sharing an identifier join; null-title papers always join
+
+    Returns
+    -------
+    List[int]: labels where each joined group takes its smallest label
+    """
+    parent = {label: label for label in labels}
+
+    def find(label: int) -> int:
+        while parent[label] != label:
+            parent[label] = parent[parent[label]]
+            label = parent[label]
+        return label
+
+    first_index_for_key: Dict[Tuple[str, str], int] = {}
+    for index, paper_id in enumerate(paper_ids):
+        for key in dataset.id_merge_keys(paper_id):
+            other = first_index_for_key.setdefault(key, index)
+            if other == index or (not join_titled and index < n_titled and other < n_titled):
+                continue
+            root_a, root_b = find(labels[other]), find(labels[index])
+            if root_a != root_b:
+                parent[max(root_a, root_b)] = min(root_a, root_b)
+    return [find(label) for label in labels]
+
+
 class Clusterer:
     """
     A wrapper for learning a clusterer
@@ -521,8 +570,12 @@ class Clusterer:
                 incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
             )
 
-        for block_key in block_dict.keys():
-            if block_key in dists and len(block_dict[block_key]) > 1:
+        # Walk every input block, not just blocks with titled papers: a block whose papers all
+        # lack titles used to vanish from the output.
+        all_block_keys = list(dict.fromkeys(list(block_dict_no_null_titles) + list(block_dict_null_titles)))
+        for block_key in all_block_keys:
+            titled_paper_ids = block_dict.get(block_key, [])
+            if block_key in dists and len(titled_paper_ids) > 1:
                 cluster_model = self.set_params(cluster_model_params, clone_flag=True)
                 with warnings.catch_warnings():
                     # annoying sparse matrix not sorted warning
@@ -536,73 +589,25 @@ class Clusterer:
                 negative_one_label_locations = np.where(labels == -1)[0]
                 for i, loc in enumerate(negative_one_label_locations):
                     labels[loc] = max_label + 1 + i
-
-                if self.use_default_constraints_as_supervision:
-                    # at this point it is possible that clusters that have overlapping
-                    # dois, pdf_hashes or pmids are STILL not joined together
-                    # due to the 0 enforced distance not being enough to outweigh
-                    # a lot of large distances. so we manually go through the clusters
-                    # find which ones overlap according to ANY of the ids, and join them
-                    inverse_id_map = defaultdict(list)
-                    for paper_id, label in zip(block_dict[block_key], labels):
-                        if dataset.papers[paper_id].doi is not None:
-                            inverse_id_map[dataset.papers[paper_id].doi].append(label)
-                        if dataset.papers[paper_id].pdf_hash is not None:
-                            inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
-                        if dataset.papers[paper_id].pmid is not None:
-                            inverse_id_map[dataset.papers[paper_id].pmid].append(label)
-
-                    # now join any clusters that have overlapping ids
-                    # this is a tad tricky because as we merge clusters, we need to
-                    # keep track of where they are going
-                    to_join_sets = [sorted(val) for val in inverse_id_map.values() if len(val) > 1]
-                    mapped_labels = {label: label for label in labels}
-                    labels = np.array(labels)
-                    for join_set in to_join_sets:
-                        for other_label in join_set[1:]:
-                            labels[labels == mapped_labels[other_label]] = mapped_labels[join_set[0]]
-                            mapped_labels[other_label] = mapped_labels[join_set[0]]
-                    labels = list(labels)
+                labels = [int(label) for label in labels]
             else:
-                labels = [0]
-                max_label = 0
+                labels = [0] * len(titled_paper_ids)
 
-            # now we can rejoin the null titles based only on the ids
-            paper_ids_for_nulls = block_dict_null_titles.get(block_key, [])
-            if len(paper_ids_for_nulls) > 0:
-                # first we compute a map from various ids to the labels
-                # have to do this again because we reassigned labels above
-                # when joining clusters based on IDs
-                inverse_id_map = defaultdict(list)
-                for paper_id, label in zip(block_dict[block_key], labels):
-                    if dataset.papers[paper_id].doi is not None:
-                        inverse_id_map[dataset.papers[paper_id].doi].append(label)
-                    if dataset.papers[paper_id].pdf_hash is not None:
-                        inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
-                    if dataset.papers[paper_id].pmid is not None:
-                        inverse_id_map[dataset.papers[paper_id].pmid].append(label)
+            # Null-title papers skip the model; each starts as a singleton and joins others by ID.
+            null_title_paper_ids = block_dict_null_titles.get(block_key, [])
+            next_label = max(labels, default=-1) + 1
+            paper_ids_for_block = titled_paper_ids + null_title_paper_ids
+            labels = labels + list(range(next_label, next_label + len(null_title_paper_ids)))
 
-                labels_for_nulls = []
-                for paper_id in paper_ids_for_nulls:
-                    # look up each of the ids of the null title papers in the inverse_id_map
-                    # and assign them the label of the first one we find
-                    doi = dataset.papers[paper_id].doi
-                    pmid = dataset.papers[paper_id].pmid
-                    pdf_hash = dataset.papers[paper_id].pdf_hash
-                    if doi is not None and doi in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[doi][0])
-                    elif pmid is not None and pmid in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[pmid][0])
-                    elif pdf_hash is not None and pdf_hash in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[pdf_hash][0])
-                    else:
-                        max_label += 1
-                        labels_for_nulls.append(max_label)
-
-                paper_ids_for_block = block_dict[block_key] + paper_ids_for_nulls
-                labels = labels + labels_for_nulls
-            else:
-                paper_ids_for_block = block_dict[block_key]
+            # The enforced 0 distance can lose to many large distances under average linkage,
+            # so clusters sharing a DOI, PMID or usable pdf_hash are joined explicitly here.
+            labels = _join_clusters_by_ids(
+                paper_ids_for_block,
+                labels,
+                dataset,
+                n_titled=len(titled_paper_ids),
+                join_titled=self.use_default_constraints_as_supervision,
+            )
 
             for paper_id, label in zip(paper_ids_for_block, labels):
                 pred_clusters[str(block_key) + "_" + str(label)].append(paper_id)

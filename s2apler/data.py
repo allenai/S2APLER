@@ -278,6 +278,46 @@ class PDData:
         logger.debug("preprocessing papers")
         self.papers = preprocess_papers_parallel(self.papers, self.n_jobs)
         logger.debug("preprocessed papers")
+        self.multi_doi_pdf_hashes = self.get_multi_doi_pdf_hashes()
+
+    def get_multi_doi_pdf_hashes(self) -> Set[str]:
+        """Finds pdf_hashes shared by papers that carry different DOIs.
+
+        One PDF often holds several short items: a page of BMJ letters, Nature research
+        highlights, a meeting-abstract supplement. Each item has its own DOI, so a pdf_hash
+        seen with two DOIs names a container, not a paper, and must not force merges.
+
+        Returns
+        -------
+        Set[str]: the pdf_hashes that map to more than one distinct DOI
+        """
+        dois_by_hash: Dict[str, Set[str]] = defaultdict(set)
+        for paper in self.papers.values():
+            if paper.pdf_hash is not None and paper.doi is not None:
+                dois_by_hash[paper.pdf_hash].add(paper.doi)
+        return {pdf_hash for pdf_hash, dois in dois_by_hash.items() if len(dois) > 1}
+
+    def id_merge_keys(self, paper_id: str) -> List[Tuple[str, str]]:
+        """Lists the identifiers that force a paper into the same cluster as others.
+
+        Parameters
+        ----------
+        paper_id: string
+            the paper id
+
+        Returns
+        -------
+        List[Tuple[str, str]]: (id type, value) pairs for the DOI, PMID and usable pdf_hash
+        """
+        paper = self.papers[str(paper_id)]
+        keys = []
+        if paper.doi is not None:
+            keys.append(("doi", paper.doi))
+        if paper.pmid is not None:
+            keys.append(("pmid", paper.pmid))
+        if paper.pdf_hash is not None and paper.pdf_hash not in self.multi_doi_pdf_hashes:
+            keys.append(("pdf_hash", paper.pdf_hash))
+        return keys
 
     @staticmethod
     def maybe_load_json(path_or_json: Optional[Union[str, Union[List, Dict]]]) -> Any:
@@ -420,8 +460,12 @@ class PDData:
         elif paper_1.pmid is not None and paper_2.pmid is not None and paper_1.pmid == paper_2.pmid:
             # if pmid is the same - same paper
             return CLUSTER_SEEDS_LOOKUP["require"]
-        elif paper_1.pdf_hash is not None and paper_2.pdf_hash is not None and paper_1.pdf_hash == paper_2.pdf_hash:
-            # same pdf hash - same paper
+        elif (
+            paper_1.pdf_hash is not None
+            and paper_1.pdf_hash == paper_2.pdf_hash
+            and paper_1.pdf_hash not in self.multi_doi_pdf_hashes
+        ):
+            # same pdf hash - same paper, unless the PDF holds several DOI'd items
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_uris
