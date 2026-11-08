@@ -957,7 +957,8 @@ class PairwiseModeler:
             self.estimator.set_params(**self.best_params)
         else:
             self.best_params = {}
-            self.hyperopt_trials_store == {}
+            # No search ran, so drop trials from any earlier fit (this was a no-op comparison).
+            self.hyperopt_trials_store = None
 
         # refitting but only on training data so as not to leak anything
         self.classifier = self.estimator.fit(X_train, y_train)

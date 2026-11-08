@@ -6,15 +6,6 @@ import json
 import pandas as pd
 import os
 
-CONFIG_LOCATION = os.path.abspath(os.path.join(__file__, os.pardir, os.pardir, "data", "path_config.json"))
-with open(CONFIG_LOCATION) as _json_file:
-    CONFIG = json.load(_json_file)
-
-EXP_DIR = os.path.join(
-    CONFIG["internal_data_dir"],
-    "experiments/",
-)
-
 
 def plot_box(
     s2apler_performance: dict,
@@ -154,6 +145,11 @@ def plot_facets(
 
 
 if __name__ == "__main__":
+    # Read the experiments directory only when run as a script: importing the plotting
+    # helpers must not require data/path_config.json or its `internal_data_dir` key.
+    from s2apler.consts import CONFIG
+
+    EXP_DIR = os.path.join(CONFIG["internal_data_dir"], "experiments/")
     TEST_DATA_PATH = EXP_DIR
 
     with open(TEST_DATA_PATH + "facetsnumber of authors_dict_pred.json", "r") as f:
