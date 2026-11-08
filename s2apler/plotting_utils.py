@@ -34,7 +34,6 @@ def plot_box(
         sns.set(rc={"figure.figsize": (12, 6)})
 
     for facet, f1 in s2apler_performance.items():
-
         if title == "year":
             if int(facet) == 0:
                 continue
@@ -145,7 +144,6 @@ def plot_facets(
         8,
     ]
     for pred_facet, s2_facet, plot_name, bin_size in zip(pred_facets, s2_facets, plot_names, num_bins):
-
         if save_results:
             with open(figs_path + plot_name + "_dict_pred.json", "w") as fp:
                 json.dump(pred_facet, fp, indent=4)

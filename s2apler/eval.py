@@ -230,7 +230,6 @@ def facet_eval(
     paper_lookup = list()
 
     for sourced_paper_id, (p, r, f1) in metrics_per_paper.items():
-
         _paper_dict = dict()
 
         cluster_id = paper_to_cluster_id[sourced_paper_id]

@@ -250,7 +250,15 @@ def main(
         logger.info(f"dataset {dataset_name} loaded")
 
         logger.info(f"featurizing {dataset_name}")
-        train, val, test = featurize(pddata, FEATURIZER_INFO, n_jobs=N_JOBS, use_cache=USE_CACHE, chunk_size=DEFAULT_CHUNK_SIZE, nameless_featurizer_info=NAMELESS_FEATURIZER_INFO, nan_value=NAN_VALUE)  # type: ignore
+        train, val, test = featurize(
+            pddata,
+            FEATURIZER_INFO,
+            n_jobs=N_JOBS,
+            use_cache=USE_CACHE,
+            chunk_size=DEFAULT_CHUNK_SIZE,
+            nameless_featurizer_info=NAMELESS_FEATURIZER_INFO,
+            nan_value=NAN_VALUE,
+        )  # type: ignore
         X_train, y_train, nameless_X_train = train
         # if we sampled more training pairs than required, then we downsample
         if len(y_train) > N_TRAIN_PAIRS_SIZE:
@@ -351,8 +359,8 @@ def main(
     logger.info("starting individual model evaluation")
     for _, source_dataset in tqdm(datasets.items(), desc="Evaluating individual models"):
         for _, target_dataset in datasets.items():
-            if not (source_dataset["name"] in SOURCE_DATASET_NAMES) or (
-                not target_dataset["name"] in TARGET_DATASET_NAMES
+            if source_dataset["name"] not in SOURCE_DATASET_NAMES or (
+                target_dataset["name"] not in TARGET_DATASET_NAMES
             ):
                 continue
 

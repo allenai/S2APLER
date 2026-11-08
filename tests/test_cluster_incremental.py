@@ -1,5 +1,4 @@
 import unittest
-import pytest
 import numpy as np
 
 from s2apler.data import PDData

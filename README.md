@@ -10,33 +10,18 @@ The model will be live on semanticscholar.org.
 - How do we test the constraints that eng will make?
 
 ## Installation
-To install this package, run the following:
+S2APLER needs Python 3.11–3.13 and [`uv`](https://docs.astral.sh/uv/). A source checkout also
+needs Rust ([`rustup`](https://www.rust-lang.org/tools/install)), because it builds the native
+extension that computes pair features:
 
 ```bash
 git clone https://github.com/allenai/S2APLER.git
 cd S2APLER
-conda create -y --name s2apler python==3.8.15
-conda activate s2apler
-pip install -r requirements.in
-pip install -e .
+uv sync --extra dev
 ```
 
-If you run into cryptic errors about GCC on macOS while installing the requirments, try this instead:
-
-```bash
-CFLAGS='-stdlib=libc++' pip install -r requirements.in
-```
-
-Alternatively, you can use `uv`:
-
-```bash
-git clone https://github.com/allenai/S2APLER.git
-cd S2APLER
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv sync
-uv pip install -e .
-```
+See [installation](docs/install.md), [development](docs/development.md) and
+[releasing](docs/release.md) for details.
 
 ## Data
 

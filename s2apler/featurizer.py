@@ -6,10 +6,12 @@ import json
 import numpy as np
 import functools
 import logging
+from collections import Counter
 
 from tqdm import tqdm
 
-from s2apler.data import PDData
+from s2apler.data import PDData, Paper
+from s2apler.runtime import load_s2apler_rust_extension
 from s2apler.consts import (
     CACHE_ROOT,
     FEATURIZER_VERSION,
@@ -25,6 +27,10 @@ from s2apler.text import (
     name_text_features,
     year_similarity,
     PUBLISHER_SOURCES,
+    NUMERALS,
+    NUMERAL_PRECEDING_WORDS,
+    SPECIAL_PUBLICATION_WORDS,
+    YEAR,
 )
 
 logger = logging.getLogger("s2apler")
@@ -437,6 +443,97 @@ def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tupl
     return features, index
 
 
+class _Interner:
+    """Maps strings to dense integer ids, so Rust compares ids instead of strings."""
+
+    def __init__(self):
+        self.ids: Dict[str, int] = {}
+
+    def __call__(self, key: str) -> int:
+        return self.ids.setdefault(key, len(self.ids))
+
+
+def _counter_input(counter: Counter, intern: _Interner) -> Tuple[List[int], List[int]]:
+    return [intern(key) for key in counter], list(counter.values())
+
+
+def rust_paper_record(paper: Any, intern: _Interner) -> Tuple:
+    """Packs one preprocessed paper into the record `PaperFeaturizer` reads.
+
+    Each field holds exactly what `_single_pair_featurize` reads from the paper, so the Rust
+    features match the Python ones. Strings become interned ids; equal ids mean equal strings.
+
+    Parameters
+    ----------
+    paper: Paper
+        a preprocessed paper; preprocessing fills the counters and author letters that `Paper`
+        types as optional, and `_single_pair_featurize` relies on them the same way
+    intern: _Interner
+        the interner shared by every paper in one featurizer
+
+    Returns
+    -------
+    Tuple: the nested record that `s2apler._s2apler_rust.PaperFeaturizer` extracts
+    """
+    tokens = paper.title.split()
+    counters = (
+        _counter_input(paper.author_info_coauthor_n_grams, intern),
+        _counter_input(paper.venue_ngrams, intern),
+        _counter_input(paper.title_ngrams_chars, intern),
+        _counter_input(paper.abstract_ngrams_words, intern),
+    )
+    title = (
+        [intern(token) for token in tokens],
+        [token in NUMERALS for token in tokens],
+        [token in NUMERAL_PRECEDING_WORDS for token in tokens],
+        [intern(word) for word in set(tokens) & SPECIAL_PUBLICATION_WORDS],
+        [int(year) for year in YEAR.findall(paper.title)],
+        paper.title.replace(" ", ""),
+    )
+    flags = (
+        paper.abstract is not None and len(paper.abstract) > 0,
+        len(paper.authors) > 0,
+        len(paper.venue) > 0,
+        paper.source in PDF_SOURCES,
+        paper.source in PUBLISHER_SOURCES,
+    )
+    return (
+        counters,
+        [[intern(letter) for letter in author.author_info_first_letters] for author in paper.authors],
+        paper.year if paper.year is not None and paper.year > 1700 else None,
+        title,
+        flags,
+        intern(paper.source) if paper.source is not None else None,
+    )
+
+
+def rust_pair_features(papers: Dict[str, Paper], pairs: List[Tuple[str, str]], n_jobs: int) -> np.ndarray:
+    """Computes `_single_pair_featurize`'s features for many pairs with the Rust extension.
+
+    Parameters
+    ----------
+    papers: Dict[str, Paper]
+        preprocessed papers by id
+    pairs: List[Tuple[str, str]]
+        paper id pairs
+    n_jobs: int
+        threads to use; values below 1 mean one thread, as the Python path runs serially
+
+    Returns
+    -------
+    np.ndarray: an (n_pairs, NUM_FEATURES) float64 array, with NaN for missing features
+    """
+    paper_ids = list(dict.fromkeys(paper_id for pair in pairs for paper_id in pair))
+    position = {paper_id: i for i, paper_id in enumerate(paper_ids)}
+    intern = _Interner()
+    featurizer = load_s2apler_rust_extension().PaperFeaturizer(
+        [rust_paper_record(papers[str(paper_id)], intern) for paper_id in paper_ids]
+    )
+    left = np.fromiter((position[a] for a, _ in pairs), dtype=np.uint32, count=len(pairs))
+    right = np.fromiter((position[b] for _, b in pairs), dtype=np.uint32, count=len(pairs))
+    return featurizer.featurize(left, right, num_threads=max(1, n_jobs))
+
+
 def parallel_helper(piece_of_work: Tuple, worker_func: Callable):
     """
     Helper function to explode tuple arguments
@@ -466,6 +563,7 @@ def many_pairs_featurize(
     nameless_featurizer_info: Optional[FeaturizationInfo] = None,
     nan_value: float = np.nan,
     delete_training_data: bool = False,
+    backend: str = "rust",
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """
     Featurizes many pairs
@@ -492,6 +590,9 @@ def many_pairs_featurize(
         the value to replace nans with
     delete_training_data: bool
         Whether to delete some suspicious training rows
+    backend: str
+        "rust" computes features in the native extension; "python" uses `_single_pair_featurize`,
+        which stays as the reference implementation
 
     Returns
     -------
@@ -499,6 +600,8 @@ def many_pairs_featurize(
     np.ndarray: the labels for all the pairs
     np.ndarray: the nameless features for all the pairs
     """
+    if backend not in {"rust", "python"}:
+        raise ValueError(f"backend must be 'rust' or 'python', got {backend!r}")
     global global_dataset
     global_dataset = dataset.papers
 
@@ -549,7 +652,16 @@ def many_pairs_featurize(
 
     logger.debug("Created pieces of work")
 
-    if cache_changed:
+    if cache_changed and backend == "rust":
+        logger.debug(f"Cached changed, doing {len(pieces_of_work)} work in Rust")
+        work_indices = [index for _, index in pieces_of_work]
+        rust_features = rust_pair_features(dataset.papers, [pair for pair, _ in pieces_of_work], n_jobs)
+        features[work_indices, :] = rust_features
+        if use_cache:
+            for index, row in zip(work_indices, rust_features.tolist()):
+                cached_features["features"][featurizer_info.feature_cache_key(paper_pairs[index])] = row
+        logger.debug("Work completed")
+    elif cache_changed:
         if n_jobs > 1:
             logger.debug(f"Cached changed, doing {len(pieces_of_work)} work in parallel")
             # Hand workers the papers explicitly: spawn-started workers (Windows, macOS) don't
@@ -568,9 +680,9 @@ def many_pairs_featurize(
                     ):
                         # Write to in memory cache if we're not skipping
                         if use_cache:
-                            cached_features["features"][
-                                featurizer_info.feature_cache_key(paper_pairs[index])
-                            ] = feature_output
+                            cached_features["features"][featurizer_info.feature_cache_key(paper_pairs[index])] = (
+                                feature_output
+                            )
                         features[index, :] = feature_output
                         pbar.update()
         else:

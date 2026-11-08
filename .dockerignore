@@ -1,0 +1,4 @@
+.venv/
+s2apler_rust/target/
+**/__pycache__/
+s2apler/_s2apler_rust*

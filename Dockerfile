@@ -6,16 +6,16 @@ RUN apt-get clean \
     && apt-get install -y \
     git \
     curl \
-    gcc \
-    g++ \
     build-essential \
-    wget \
+    pkg-config \
     awscli
 
-WORKDIR /work
+# Building the native extension needs Rust; installing the locked environment needs uv.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
+COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /bin/uv
 
-# install python packages
-COPY requirements.in .
+WORKDIR /work
 
 # copy over the data file
 COPY data/path_config.json ./data/
@@ -23,17 +23,13 @@ COPY data/path_config.json ./data/
 # add the code as the final step so that when we modify the code
 # we don't bust the cached layers holding the dependencies and
 # system packages.
+COPY pyproject.toml uv.lock README.md LICENSE VERSION ./
+COPY s2apler_rust/ s2apler_rust/
 COPY s2apler/ s2apler/
 COPY scripts/ scripts/
 COPY tests/ tests/
-COPY .flake8 .flake8
-COPY pyproject.toml pyproject.toml
 
-RUN pip install -r requirements.in
-
-# s2and pins setuptools 78-81, where `setup.py develop` is deprecated; install through
-# pyproject.toml instead. Dependencies are already installed from requirements.in.
-COPY setup.py README.md ./
-RUN pip install --no-deps -e .
+RUN uv sync --frozen --extra dev
+ENV PATH="/work/.venv/bin:${PATH}"
 
 CMD [ "/bin/bash" ]

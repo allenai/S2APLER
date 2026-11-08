@@ -1041,7 +1041,7 @@ class VotingClassifier:
             Weighted average probability for each class per sample.
         """
         if self.voting == "hard":
-            raise AttributeError("predict_proba is not available when" " voting=%r" % self.voting)
+            raise AttributeError("predict_proba is not available when voting=%r" % self.voting)
         avg = np.average(self._collect_probas(X), axis=0, weights=self.weights)
         return avg
 

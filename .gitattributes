@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+# Keep binary model artifacts byte-exact.
+*.pickle binary
+*.lgb -text

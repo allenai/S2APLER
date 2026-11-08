@@ -3,6 +3,7 @@ This scripts trains a S2APLER model and then dumps it to disk.
 
 If you want to figure out what EPS to use, that is done in analyze_final_data.ipynb
 """
+
 import os
 
 N_JOBS = 16

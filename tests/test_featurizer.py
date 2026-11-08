@@ -1,10 +1,8 @@
 import unittest
-import pytest
 import numpy as np
 
 from s2apler.data import PDData
 from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
-from s2apler.consts import LARGE_INTEGER
 
 
 class TestData(unittest.TestCase):

@@ -134,3 +134,8 @@ foo-*
 *.dat
 *.png
 *.cpp
+
+# Native extension builds
+s2apler_rust/target/
+s2apler/_s2apler_rust*.pyd
+s2apler/_s2apler_rust*.so
