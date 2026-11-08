@@ -278,3 +278,18 @@ class TestDistanceLabels:
         # NaN tells make_distance_matrices to ask the classifier; a number is a forced distance.
         assert np.isnan(labels[("1", "2")])
         assert labels[("3", "4")] == CLUSTER_SEEDS_LOOKUP["require"] - LARGE_INTEGER
+
+
+class TestPredictOrder:
+    @pytest.mark.parametrize("order", list(permutations("abc")))
+    def test_tied_distances_cluster_the_same_in_any_input_order(self, order):
+        # a is equally close to b and c, which are far apart. Average linkage merges whichever tied
+        # pair it meets first, and the third paper then stays apart (mean distance 0.6 > eps 0.5).
+        # Callers send papers in arbitrary order, so predict must sort them first.
+        dataset = make_dataset({key: {"title": f"paper {key}"} for key in "abc"})
+        supervision = {("a", "b"): 0.3, ("a", "c"): 0.3, ("b", "c"): 0.9}
+        supervision.update({(y, x): d for (x, y), d in list(supervision.items())})
+        clusterer = make_clusterer()
+        clusterer.set_params({"eps": 0.5})
+        clusters, _ = clusterer.predict({"b": list(order)}, dataset, partial_supervision=supervision)
+        assert partition(clusters) == [["a", "b"], ["c"]]

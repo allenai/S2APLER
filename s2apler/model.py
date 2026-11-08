@@ -34,6 +34,10 @@ def _split_null_title_papers(
 ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     """Splits each block into titled papers, which the model clusters, and null-title papers.
 
+    Both lists are sorted by paper id. Average linkage breaks distance ties by input position, and
+    callers (Scholar builds requests from hash maps) don't fix an order, so sorting makes the
+    clusters a function of the papers alone. Precomputed distances must follow this order.
+
     Parameters
     ----------
     block_dict: Dict[str, List[str]]
@@ -43,8 +47,8 @@ def _split_null_title_papers(
 
     Returns
     -------
-    Dict[str, List[str]]: titled paper ids per block, for blocks that have any
-    Dict[str, List[str]]: null-title paper ids per block, for blocks that have any
+    Dict[str, List[str]]: sorted titled paper ids per block, for blocks that have any
+    Dict[str, List[str]]: sorted null-title paper ids per block, for blocks that have any
     """
     titled: Dict[str, List[str]] = defaultdict(list)
     null_titled: Dict[str, List[str]] = defaultdict(list)
@@ -55,7 +59,10 @@ def _split_null_title_papers(
                 null_titled[block_key].append(paper_id)
             else:
                 titled[block_key].append(paper_id)
-    return dict(titled), dict(null_titled)
+    return (
+        {block_key: sorted(paper_ids) for block_key, paper_ids in titled.items()},
+        {block_key: sorted(paper_ids) for block_key, paper_ids in null_titled.items()},
+    )
 
 
 def _join_clusters_by_ids(
@@ -577,7 +584,7 @@ class Clusterer:
         dataset: PDData
             the dataset
         dists: Dict
-            (optional) precomputed distance matrices
+            (optional) precomputed distance matrices, over each block's titled papers sorted by id
         cluster_model_params: Dict
             params to set on the cluster model
         partial_supervision: Dict
