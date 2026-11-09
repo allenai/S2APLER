@@ -147,3 +147,32 @@ def test_clusterer_distances_match_lightgbm(monkeypatch):
     assert native.keys() == reference.keys()
     for key in native:
         assert np.array_equal(native[key], reference[key])
+
+
+def test_grouped_rows_match_lightgbm_on_repeated_and_edge_rows(classifier):
+    from s2apler.native_scorer import split_thresholds
+
+    assert split_thresholds(classifier.booster_.model_to_string()) is not None
+    native = NativeLightGBMClassifier.from_lgbm(classifier, num_threads=2)
+    edges = edge_rows(classifier, 18, seed=6)[:500]
+    # Many repeats, plus rows that differ only within a bin or the zero window.
+    rows = np.vstack([edges, edges[::-1], edges[:50] * (1 + 1e-12), np.where(edges == 0.0, 1e-36, edges)])
+    assert np.array_equal(native.predict_proba(rows), classifier.predict_proba(rows))
+
+
+def test_grouping_turns_off_where_bins_do_not_decide_the_path():
+    from s2apler.native_scorer import split_thresholds
+
+    rng = np.random.default_rng(3)
+    X = rng.normal(size=(500, 3))
+    y = (X[:, 0] > 0).astype(int)
+    numerical = lgb.LGBMClassifier(n_estimators=5, verbose=-1).fit(X, y).booster_.model_to_string()
+    assert split_thresholds(numerical) is not None
+    zero_missing = lgb.LGBMClassifier(n_estimators=5, zero_as_missing=True, verbose=-1).fit(X, y)
+    linear = lgb.LGBMClassifier(n_estimators=5, linear_tree=True, verbose=-1).fit(X, y)
+    category = rng.integers(0, 4, 500)
+    categorical = lgb.LGBMClassifier(n_estimators=5, verbose=-1).fit(
+        np.column_stack([X[:, :2], category]), np.isin(category, [1, 3]).astype(int), categorical_feature=[2]
+    )
+    for model in (zero_missing, linear, categorical):
+        assert split_thresholds(model.booster_.model_to_string()) is None

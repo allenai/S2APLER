@@ -16,11 +16,17 @@ platform used by the GitHub runners. Pass `--python-platform windows` for a Wind
 ## Pair features in Rust
 
 `s2apler.featurizer.many_pairs_featurize` computes pair features in Rust by default.
-Python still preprocesses each paper (LaTeX, transliteration, n-gram counters);
-`rust_paper_record` packs each paper once, and the extension computes all 18 features per pair
-in parallel. `_single_pair_featurize` stays as the reference implementation: pass
-`backend="python"` to use it. `tests/test_rust_featurizer.py` requires the two to agree bit
-for bit, NaNs included.
+Python still preprocesses each paper (LaTeX, transliteration, name normalization) and keeps
+the texts that n-grams come from. `rust_paper_record` packs each paper once, with those texts as
+UTF-32 code points; the extension counts the n-grams and computes all 18 features per pair in
+parallel. `_single_pair_featurize` stays as the reference implementation: pass
+`backend="python"` to use it. It builds Python `Counter`s from the same texts with
+`s2apler.data.with_counters`. `tests/test_rust_featurizer.py` requires the two to agree bit for
+bit, NaNs included, on raw Unicode titles and names too.
+
+`Clusterer.make_distance_matrices` handles pairs as arrays: `PDData.constraint_values` applies
+`get_constraint`'s rules to whole blocks, and `tests/test_distance_matrices.py` checks both
+against the per-pair path. The native scorer scores each distinct row of split bins once.
 
 The counter, string-similarity, thread-pool and build-script code comes from S2AND's native
 extension; `s2apler_rust/THIRD_PARTY_NOTICES.md` lists it.

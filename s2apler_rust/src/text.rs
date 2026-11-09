@@ -1,26 +1,16 @@
 //! String similarity functions. Copied from s2and's `features.rs` and `lib.rs` unless noted.
 //!
-//! jellyfish 1.x, which S2APLER's Python featurizer calls, compares grapheme clusters; these
-//! compare characters, as s2and's do. The two agree on ASCII, and S2APLER's normalized titles
-//! are ASCII: `normalize_text` transliterates with unidecode and keeps only [a-z0-9] and spaces.
+//! S2APLER's normalized titles are ASCII: `normalize_text` transliterates with unidecode and
+//! keeps only [a-z0-9] and spaces. `PaperFeaturizer` rejects other titles, so title features
+//! use the byte versions in `text_fast`. The character versions below stay as their test
+//! references; they match jellyfish, which S2APLER's Python featurizer calls, on ASCII.
 
-pub(crate) fn py_len(s: &str) -> usize {
-    // Python len() semantics for str: count of Unicode scalar values
-    s.chars().count()
-}
+use crate::text_fast;
 
-/// `py_len(s) > 1`, decoding at most two characters instead of counting all.
-pub(crate) fn py_len_above_one(s: &str) -> bool {
-    s.chars().nth(1).is_some()
-}
-
+#[cfg(test)]
 pub(crate) fn levenshtein_distance(a: &str, b: &str) -> usize {
     if a == b {
         return 0;
-    }
-
-    if a.is_ascii() && b.is_ascii() {
-        return levenshtein_distance_bytes(a.as_bytes(), b.as_bytes());
     }
 
     let b_chars: Vec<char> = b.chars().collect();
@@ -46,34 +36,11 @@ pub(crate) fn levenshtein_distance(a: &str, b: &str) -> usize {
     prev[len_b]
 }
 
-pub(crate) fn levenshtein_distance_bytes(a: &[u8], b: &[u8]) -> usize {
-    let len_a = a.len();
-    let len_b = b.len();
-    if len_a == 0 {
-        return len_b;
-    }
-    if len_b == 0 {
-        return len_a;
-    }
-    let mut prev: Vec<usize> = (0..=len_b).collect();
-    let mut cur: Vec<usize> = vec![0; len_b + 1];
-    for i in 1..=len_a {
-        cur[0] = i;
-        for j in 1..=len_b {
-            let deletion = prev[j] + 1;
-            let insertion = cur[j - 1] + 1;
-            let edit = prev[j - 1] + if a[i - 1] == b[j - 1] { 0 } else { 1 };
-            cur[j] = deletion.min(insertion).min(edit);
-        }
-        std::mem::swap(&mut prev, &mut cur);
-    }
-    prev[len_b]
-}
-
 /// S2APLER's `prefix_dist`: the smaller of the forward and reversed prefix distances.
 ///
 /// s2and's `prefix_dist` compares prefixes only; S2APLER's Python version also compares the
 /// reversed strings, because titles sometimes differ only in their first characters.
+#[cfg(test)]
 pub(crate) fn prefix_dist(a: &str, b: &str) -> f64 {
     if a == b {
         return 0.0;
@@ -91,6 +58,7 @@ pub(crate) fn prefix_dist(a: &str, b: &str) -> f64 {
 }
 
 /// The prefix loop of s2and's `prefix_dist`.
+#[cfg(test)]
 fn prefix_dist_helper(min_chars: &[char], max_chars: &[char]) -> f64 {
     let min_len = min_chars.len();
     for i in (1..=min_len).rev() {
@@ -101,6 +69,7 @@ fn prefix_dist_helper(min_chars: &[char], max_chars: &[char]) -> f64 {
     1.0
 }
 
+#[cfg(test)]
 pub(crate) fn jaro_winkler_similarity(a: &str, b: &str, long_tolerance: bool) -> f64 {
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();
@@ -193,14 +162,18 @@ pub(crate) fn year_diff_capped(year1: Option<f64>, year2: Option<f64>, cap: f64)
 ///
 /// Adapted from s2and's version, which adds an LCS feature and returns NaN only for empty names.
 /// S2APLER returns NaN when either name has at most one character, as its Python code does.
+/// Both names must be ASCII, as `PaperFeaturizer` checks.
 pub(crate) fn name_text_features(n1: &str, n2: &str) -> [f64; 3] {
-    if !py_len_above_one(n1) || !py_len_above_one(n2) {
+    let (b1, b2) = (n1.as_bytes(), n2.as_bytes());
+    if b1.len() < 2 || b2.len() < 2 {
         return [f64::NAN; 3];
     }
-    let lev = levenshtein_distance(n1, n2) as f64 / (py_len(n1).max(py_len(n2)) as f64);
-    let pref = prefix_dist(n1, n2);
-    let jaro = jaro_winkler_similarity(n1, n2, false);
-    [lev, pref, jaro]
+    let lev = text_fast::levenshtein_ascii(b1, b2) as f64 / (b1.len().max(b2.len()) as f64);
+    [
+        lev,
+        text_fast::prefix_dist_ascii(b1, b2),
+        text_fast::jaro_winkler_ascii(b1, b2),
+    ]
 }
 
 #[cfg(test)]

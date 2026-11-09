@@ -17,6 +17,8 @@ extension-module = ["pyo3/extension-module"]
 pyo3 = { version = "0.24.2" }
 numpy = "0.24"
 rayon = "1.10"
+# s2and's extension hashes with aHash too.
+ahash = "0.8"
 
 # Worker threads that allocate in parallel contend for glibc malloc arenas.
 # Musl wheels keep the system allocator (inherited from s2and's setup).

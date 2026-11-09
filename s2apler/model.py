@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from s2apler.eval import b3_precision_recall_fscore
-from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
-from s2apler.data import PDData
+from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize, paper_featurizer
+from s2apler.data import PDData, condensed_offsets
 from s2apler.consts import LARGE_INTEGER
 from s2apler.native_scorer import scoring_classifier
 from s2and.thread_config import resolve_n_jobs
@@ -14,7 +14,6 @@ from functools import partial
 from tqdm import tqdm
 import logging
 import copy
-import math
 
 import numpy as np
 from scipy.cluster.hierarchy import fcluster
@@ -129,6 +128,77 @@ def _join_clusters_by_ids(
             root = renumbered.setdefault(root, first_null_label + len(renumbered))
         joined.append(root)
     return joined
+
+
+def _supervision_by_block(
+    block_dict: Dict[str, List[str]], partial_supervision: Dict[Tuple[str, str], Union[int, float]]
+) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+    """Places partial supervision into blocks once, as condensed offsets and values.
+
+    distance_matrix_helper checks a pair in block order before the reverse order, so an entry
+    given in block order wins over one given in reverse.
+
+    Parameters
+    ----------
+    block_dict: Dict
+        block key to paper ids
+    partial_supervision: Dict
+        (paper id, paper id) to the value to use for that pair
+
+    Returns
+    -------
+    Dict: block key to (offsets, values) for the blocks with any supervised pair
+    """
+    if not partial_supervision:
+        return {}
+    places: Dict[str, List[Tuple[str, int]]] = defaultdict(list)
+    for block_key, papers in block_dict.items():
+        for k, paper_id in enumerate(papers):
+            places[paper_id].append((block_key, k))
+    found: Dict[str, Dict[int, Union[int, float]]] = defaultdict(dict)
+    for in_block_order in (False, True):
+        for (paper_a, paper_b), value in partial_supervision.items():
+            for block_key, i in places.get(paper_a, ()):
+                for other_key, j in places.get(paper_b, ()):
+                    if other_key != block_key or i == j or (i < j) != in_block_order:
+                        continue
+                    n = len(block_dict[block_key])
+                    found[block_key][int(condensed_offsets(np.array(min(i, j)), np.array(max(i, j)), n))] = value
+    return {
+        block_key: (np.fromiter(entries, dtype=np.int64), np.array(list(entries.values()), dtype=float))
+        for block_key, entries in found.items()
+    }
+
+
+def _condensed_pair_chunks(n: int, max_pairs: int):
+    """Yields an n-paper block's pairs in condensed order, a few rows of the matrix at a time.
+
+    Parameters
+    ----------
+    n: int
+        the number of papers in the block
+    max_pairs: int
+        the most pairs to yield at once, unless one row holds more
+
+    Yields
+    ------
+    (left, right, first_offset): paper indices of each pair, and the first pair's offset
+    """
+    row = 0
+    while row < n - 1:
+        # Row i holds the n - 1 - i pairs (i, j) with j > i.
+        end = row + 1
+        total = n - 1 - row
+        while end < n - 1 and total + (n - 1 - end) <= max_pairs:
+            total += n - 1 - end
+            end += 1
+        rows = np.arange(row, end)
+        counts = n - 1 - rows
+        left = np.repeat(rows, counts)
+        starts = np.repeat(np.cumsum(counts) - counts, counts)
+        right = left + 1 + (np.arange(total) - starts)
+        yield left, right, row * n - row * (row + 1) // 2
+        row = end
 
 
 class Clusterer:
@@ -306,8 +376,11 @@ class Clusterer:
     ) -> Dict[str, np.ndarray]:
         """
         Creates the distance matrices for the input blocks.
-        Note: This function is much more complicated than it needs to be in an
-        effort to reduce its memory footprint
+
+        Pairs are handled as arrays, not one Python object each: constraints come from
+        PDData.constraint_values, the native featurizer takes pair positions, and at most
+        batch_size pairs are featurized and scored at a time. The distances are the same as
+        building each pair with distance_matrix_helper, which stays as the reference.
 
         Parameters
         ----------
@@ -327,88 +400,122 @@ class Clusterer:
         Dict: the distance matrix dictionary, keyed by block key
         """
         logger.debug(f"Making {len(block_dict)} distance matrices")
-        logger.debug("Initializing pairwise_probas")
-        # initialize pairwise_probas with correctly size arrays
-        pairwise_probas = {}
-        num_pairs = 0
-        for block_key, paper_ids in block_dict.items():
-            block_size = len(paper_ids)
-            num_pairs += int(block_size * (block_size - 1) / 2)
-            # flattened pdist style
-            pairwise_probas[block_key] = np.zeros(int(block_size * (block_size - 1) / 2), dtype=np.float16)
+        paper_ids = list(dict.fromkeys(paper_id for papers in block_dict.values() for paper_id in papers))
+        position = {paper_id: i for i, paper_id in enumerate(paper_ids)}
+        num_threads = resolve_n_jobs(self.n_jobs) if self.n_jobs != 0 else 1
+        featurizer = None
+        # Scored pairs wait here until a batch is full: (distances, offsets, left, right).
+        pending: List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
+        pending_count = 0
 
-        logger.debug("Pairwise probas initialized, starting making all pairs")
-
-        # featurize and predict in batches
-        helper_output = self.distance_matrix_helper(
-            block_dict,
-            dataset,
-            partial_supervision,
-            incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
-        )
-
-        prev_block_key = ""
-        batch_num = 0
-        num_batches = math.ceil(num_pairs / self.batch_size)
-        while True:
-            logger.debug(f"Featurizing batch {batch_num}/{num_batches}")
-            count = 0
-            pairs = []
-            blocks = []
-            logger.debug("Getting constraints")
-            # iterate over a batch_size number of pairs
-            for item in helper_output:
-                pairs.append(item[0])
-                blocks.append(item[2])
-                count += 1
-                if count == self.batch_size:
-                    break
-
-            if len(pairs) == 0:
-                break
-
-            batch_features, _ = many_pairs_featurize(pairs, dataset, self.featurizer_info, self.n_jobs)
-            # get predictions where there isn't partial supervision
-            # and fill the rest with partial supervision
-            # undoing the offset by LARGE_INTEGER from above
-            logger.debug("Making predict flags")
-            batch_labels = np.array([i[2] for i in pairs])
-            predict_flag = np.isnan(batch_labels)
-            not_predict_flag = ~predict_flag
-            batch_predictions = np.zeros(len(batch_features))
+        def score_pending():
+            nonlocal featurizer, pending, pending_count
+            if featurizer is None:
+                featurizer = paper_featurizer(dataset.papers, paper_ids)
+            left = np.concatenate([item[2] for item in pending])
+            right = np.concatenate([item[3] for item in pending])
+            features = featurizer.featurize(left, right, num_threads=num_threads)
+            features = features[:, self.featurizer_info.indices_to_use]
             # index 0 is p(not the same)
-            logger.debug("Pairwise classification")
-            if np.any(predict_flag):
-                batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
-                    batch_features[predict_flag, :]
-                )[:, 0]
-            if np.any(not_predict_flag):
-                batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
+            probabilities = self._scorer(self.classifier).predict_proba(features)[:, 0]
+            start = 0
+            for distances, offsets, _, _ in pending:
+                distances[offsets] = probabilities[start : start + len(offsets)]
+                start += len(offsets)
+            pending, pending_count = [], 0
 
-            logger.debug("Starting to make matrices")
-            for within_batch_index, prediction in tqdm(
-                enumerate(batch_predictions),
-                total=len(batch_predictions),
-                desc="Writing matrices",
-                disable=disable_tqdm,
-            ):
-                block_key = blocks[within_batch_index]
-                if block_key != prev_block_key:
-                    block_key_start_index = blocks.index(block_key) + (batch_num * self.batch_size)
-                    pairwise_proba = pairwise_probas[block_key]
-
-                index = (batch_num * self.batch_size + within_batch_index) - block_key_start_index
-                pairwise_proba[index] = prediction
-
-                prev_block_key = block_key
-
-            if count < self.batch_size:
-                break
-
-            batch_num += 1
+        supervision = _supervision_by_block(block_dict, partial_supervision)
+        distance_matrices = {}
+        for block_key, papers in tqdm(block_dict.items(), desc="Making distance matrices", disable=disable_tqdm):
+            n = len(papers)
+            # flattened pdist style
+            distances = np.zeros(n * (n - 1) // 2, dtype=np.float16)
+            distance_matrices[block_key] = distances
+            block_positions = np.array([position[paper_id] for paper_id in papers], dtype=np.uint32)
+            pair_rules = dataset.block_pair_rules(papers) if self.use_default_constraints_as_supervision else None
+            for left, right, first_offset in _condensed_pair_chunks(n, self.batch_size):
+                labels = self._pair_labels(
+                    papers,
+                    left,
+                    right,
+                    first_offset,
+                    dataset,
+                    supervision.get(block_key),
+                    incremental_dont_use_cluster_seeds,
+                    pair_rules,
+                )
+                offsets = np.arange(first_offset, first_offset + len(left))
+                fixed = ~np.isnan(labels)
+                # The same arithmetic as the per-pair path, which offset labels by LARGE_INTEGER.
+                distances[offsets[fixed]] = (labels[fixed] - LARGE_INTEGER) + LARGE_INTEGER
+                scored = ~fixed
+                if np.any(scored):
+                    pending.append(
+                        (distances, offsets[scored], block_positions[left[scored]], block_positions[right[scored]])
+                    )
+                    pending_count += int(np.count_nonzero(scored))
+                if pending_count >= self.batch_size:
+                    score_pending()
+        if pending:
+            score_pending()
 
         logger.debug(f"{len(block_dict)} distance matrices made")
-        return pairwise_probas
+        return distance_matrices
+
+    def _pair_labels(
+        self,
+        papers: List[str],
+        left: np.ndarray,
+        right: np.ndarray,
+        first_offset: int,
+        dataset: PDData,
+        supervision: Optional[Tuple[np.ndarray, np.ndarray]],
+        incremental_dont_use_cluster_seeds: bool,
+        pair_rules: Optional[Tuple[np.ndarray, np.ndarray]],
+    ) -> np.ndarray:
+        """Labels for pairs of one block, as distance_matrix_helper gives them, without its offset.
+
+        Parameters
+        ----------
+        papers: List[str]
+            the block's paper ids
+        left: np.ndarray
+            the first paper of each pair, as an index into papers
+        right: np.ndarray
+            the second paper of each pair
+        first_offset: int
+            the condensed offset of the first pair
+        dataset: PDData
+            the dataset
+        supervision: Tuple[np.ndarray, np.ndarray]
+            the block's partial supervision from _supervision_by_block, or None
+        incremental_dont_use_cluster_seeds: bool
+            whether to ignore the dataset's cluster seeds
+        pair_rules: Tuple[np.ndarray, np.ndarray]
+            dataset.block_pair_rules for the block
+
+        Returns
+        -------
+        np.ndarray: each pair's partial supervision or constraint value, NaN where neither applies
+        """
+        if self.use_default_constraints_as_supervision:
+            labels = dataset.constraint_values(
+                papers,
+                left,
+                right,
+                first_offset,
+                dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
+                incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
+                pair_rules=pair_rules,
+            )
+        else:
+            labels = np.full(len(left), np.nan)
+        if supervision is not None:
+            # Partial supervision overrides constraints.
+            offsets, values = supervision
+            in_chunk = (offsets >= first_offset) & (offsets < first_offset + len(labels))
+            labels[offsets[in_chunk] - first_offset] = values[in_chunk]
+        return labels
 
     def fit(
         self,
