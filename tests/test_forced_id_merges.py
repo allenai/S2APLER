@@ -167,6 +167,19 @@ class TestPredictIdJoins:
         clusters, _ = make_clusterer().predict({"b": list(order)}, dataset, dists={"b": far_apart(5)})
         assert partition(clusters) == [["1", "2", "3", "4", "5"]]
 
+    def test_arxiv_id_joins_clusters_the_model_keeps_apart(self):
+        # The DBLP record gives the arXiv DOI as a resolver URL; it still yields the arXiv id.
+        dataset = make_dataset(
+            {
+                "1": {"title": "Olmo 3", "source": "ArXiv", "source_id": "2512.13961"},
+                "2": {"title": "Olmo 3", "source": "DBLP", "doi": "https://doi.org/10.48550/arXiv.2512.13961"},
+                "3": {"title": "Olmo 2", "source": "ArXiv", "source_id": "2501.00656"},
+                "4": {"title": None, "source": "ArXiv", "source_id": "2501.00656v3"},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"b": ["1", "2", "3", "4"]}, dataset, dists={"b": far_apart(3)})
+        assert partition(clusters) == [["1", "2"], ["3", "4"]]
+
     def test_multi_doi_pdf_hash_does_not_join_clusters(self):
         dataset = make_dataset(
             {

@@ -326,6 +326,40 @@ SPECIAL_PUBLICATION_WORDS = {
 }
 
 
+# Correction notices: "Correction to: X", "Erratum", "Publisher Correction: X", "Retraction note: X".
+# A notice shares the corrected paper's title, authors and venue, yet is a separate work
+# (allenai/scholar#42255). "Retracted:" and "Notice of Retraction:" are left out: publishers prefix
+# the retracted article's own title with them. "Correction of X" is an article title.
+_NOTICE_PREFIX = r"^(?:(?:publisher|author|authors) )?"
+_NOT_ARTICLE_OF = r"(?!(?: of)(?: |$))(?: |$)"
+CORRECTION_NOTICE = re.compile(
+    _NOTICE_PREFIX
+    + r"(?:corrigendum|corrigenda|erratum|errata|correction|corrections|addendum|retraction|expression of concern)"
+    + _NOT_ARTICLE_OF
+)
+# Correction-family notices whose identifiers are their own. Records sharing such a notice's DOI
+# or PMID are copies of the notice. Retraction and expression-of-concern titles are left out:
+# about one in five such records carries the retracted article's own DOI.
+_CORRECTION_FAMILY = re.compile(
+    _NOTICE_PREFIX + r"(?:corrigendum|corrigenda|erratum|errata|correction|corrections|addendum)" + _NOT_ARTICLE_OF
+)
+
+
+def is_correction_notice(title: Optional[str]) -> bool:
+    """Whether a normalized title is a correction notice's; see CORRECTION_NOTICE."""
+    return bool(title) and CORRECTION_NOTICE.match(title) is not None
+
+
+def marks_notice_identifiers(title: Optional[str]) -> bool:
+    """Whether a normalized title shows its record's DOI and PMID belong to a correction notice.
+
+    Only correction-family titles that also name the corrected work ("Correction: X") qualify.
+    A bare "Correction" names nothing, and such records sometimes carry the article's own DOI.
+    """
+    match = _CORRECTION_FAMILY.match(title or "")
+    return match is not None and len((title or "").split()) > len(match.group(0).split())
+
+
 # regex to check if a string is a year
 # that starts with 19 or 2 and has 4 digits
 YEAR = re.compile(r"19\d\d|20\d\d|20\d\d")

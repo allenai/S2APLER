@@ -30,6 +30,8 @@ from s2apler.text import (
     NAME_PREFIXES,
     A_THROUGH_Z,
     PUBLISHER_SOURCES,
+    is_correction_notice,
+    marks_notice_identifiers,
 )
 
 logger = logging.getLogger("s2apler")
@@ -69,6 +71,14 @@ class Paper(NamedTuple):
     source: Optional[str]
     block: Optional[str]
     source_uris: Optional[List[str]] = None
+    # The texts the n-gram counters above come from. Preprocessing keeps these and leaves the
+    # counters empty: the native featurizer counts n-grams itself, and with_counters builds
+    # the Counters when Python needs them.
+    title_ngram_text: Optional[str] = None
+    abstract_ngram_text: Optional[str] = None
+    venue_ngram_text: Optional[str] = None
+    coauthor_ngram_text: Optional[str] = None
+    arxiv_id: Optional[str] = None
 
 
 # Resolver URLs, with or without scheme or host prefix: https://doi.org/, http://dx.doi.org/, doi.org/.
@@ -104,6 +114,69 @@ def normalize_doi(doi: Optional[str]) -> Optional[str]:
     else:
         doi = DOI_SCHEME_PREFIX.sub("", doi, count=1)
     return doi.strip().lower() or None
+
+
+def _codes(values: List[Any]) -> np.ndarray:
+    """Integer codes for hashable values, equal codes for equal values; None becomes -1.
+
+    A value unequal to itself, such as NaN, gets a code of its own, as == and != treat it.
+    A dict would match one NaN object to itself by identity.
+    """
+    table: Dict[Any, int] = {}
+
+    def code(value: Any) -> int:
+        if value is None:
+            return -1
+        if value != value:
+            table[object()] = len(table)
+            return len(table) - 1
+        return table.setdefault(value, len(table))
+
+    return np.fromiter((code(value) for value in values), dtype=np.int64, count=len(values))
+
+
+def condensed_offsets(i: np.ndarray, j: np.ndarray, n: int) -> np.ndarray:
+    """Positions of pairs (i, j), i < j, in a condensed n-by-n distance vector."""
+    return i * n - i * (i + 1) // 2 + (j - i - 1)
+
+
+RE_ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
+RE_ARXIV_VERSION = re.compile(r"v\d+$", re.IGNORECASE)
+
+
+def _normalize_arxiv_id(arxiv_id: Optional[str]) -> Optional[str]:
+    """Lowercase and strip a trailing version suffix (e.g. '2512.13961v2' -> '2512.13961')."""
+    if not arxiv_id:
+        return None
+    normalized = RE_ARXIV_VERSION.sub("", arxiv_id.strip().lower())
+    return normalized or None
+
+
+def extract_arxiv_id(
+    source: Optional[str],
+    source_id: Optional[str],
+    doi: Optional[str],
+    explicit: Optional[str] = None,
+) -> Optional[str]:
+    """Derive a normalized arXiv id from (in priority order) an explicit field, the arXiv
+    DataCite DOI '10.48550/arXiv.<id>', or an ArXiv-sourced record's source_id. Returns None if
+    none apply.
+
+    This backs a first-class arXiv-id merge constraint (see get_constraint). It is intentionally
+    kept out of `doi`: S2 does not synthesize the '10.48550/arXiv.<id>' DOI onto arXiv-only
+    records, so an arXiv-only record (source_id=<id>, doi=None) and a DBLP record for the same
+    paper (doi='10.48550/arXiv.<id>') otherwise share no hard identifier. Folding it into `doi`
+    instead would make a preprint and its published version (a real, different DOI) look like
+    disagreeing strong signals -- see `_strong_signals_disagree` / allenai/scholar#41863."""
+    if explicit:
+        return _normalize_arxiv_id(explicit)
+    if doi:
+        match = RE_ARXIV_DOI.match(doi.strip())
+        if match:
+            return _normalize_arxiv_id(match.group(1))
+    if source and source_id and source.lower() == "arxiv":
+        return _normalize_arxiv_id(source_id)
+    return None
 
 
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
@@ -218,6 +291,13 @@ class PDData:
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
                 source_uris=paper.get("source_uris", None),
+                arxiv_id=extract_arxiv_id(
+                    paper.get("source", None),
+                    paper.get("source_id", None),
+                    # The normalized DOI, so a resolver URL for the arXiv DOI still yields the id.
+                    normalize_doi(paper.get("doi", None)),
+                    paper.get("arxiv_id", None),
+                ),
             )
         logger.debug("loaded papers")
 
@@ -280,6 +360,7 @@ class PDData:
         self.papers = preprocess_papers_parallel(self.papers, self.n_jobs)
         logger.debug("preprocessed papers")
         self.multi_doi_pdf_hashes = self.get_multi_doi_pdf_hashes()
+        self.correction_notices = self.get_correction_notices()
 
     def get_multi_doi_pdf_hashes(self) -> Set[str]:
         """Finds pdf_hashes shared by papers that carry different DOIs.
@@ -299,6 +380,49 @@ class PDData:
                 dois_by_hash[paper.pdf_hash].add(paper.doi)
         return {pdf_hash for pdf_hash, dois in dois_by_hash.items() if len(dois) > 1}
 
+    def get_correction_notices(self) -> Set[str]:
+        """Finds the papers that are correction notices.
+
+        Papers linked by a shared DOI, PMID, usable pdf_hash or arXiv id end up in one cluster, so each
+        linked group is all notices or none; anything else would contradict the forced merge.
+        A group is a notice when it holds a "Correction: X" paper with its own DOI or PMID,
+        because a notice's copies often drop the prefix and its PDF often carries the
+        article's title. A PDF record linked only by pdf_hash doesn't count: some carry the
+        notice's title but the article's PDF. A group is also a notice when every titled
+        paper in it is one. A group mixing other notice titles, such
+        as "Retraction note: X", with plain titles counts as the article: such records
+        sometimes carry the article's own DOI.
+
+        Returns
+        -------
+        Set[str]: ids of the papers that are correction notices
+        """
+        parent = {paper_id: paper_id for paper_id in self.papers}
+
+        def find(paper_id: str) -> str:
+            while parent[paper_id] != paper_id:
+                parent[paper_id] = parent[parent[paper_id]]
+                paper_id = parent[paper_id]
+            return paper_id
+
+        first_with_key: Dict[Tuple[str, str], str] = {}
+        for paper_id in self.papers:
+            for key in self.id_merge_keys(paper_id):
+                if key in first_with_key:
+                    parent[find(paper_id)] = find(first_with_key[key])
+                else:
+                    first_with_key[key] = paper_id
+        marked: Set[str] = set()
+        titled_notices: Dict[str, bool] = {}
+        for paper_id, paper in self.papers.items():
+            root = find(paper_id)
+            if marks_notice_identifiers(paper.title) and (paper.doi is not None or paper.pmid is not None):
+                marked.add(root)
+            if paper.title:
+                titled_notices[root] = titled_notices.get(root, True) and is_correction_notice(paper.title)
+        notice_roots = marked | {root for root, all_notices in titled_notices.items() if all_notices}
+        return {paper_id for paper_id in self.papers if find(paper_id) in notice_roots}
+
     def id_merge_keys(self, paper_id: str) -> List[Tuple[str, str]]:
         """Lists the identifiers that force a paper into the same cluster as others.
 
@@ -309,7 +433,7 @@ class PDData:
 
         Returns
         -------
-        List[Tuple[str, str]]: (id type, value) pairs for the DOI, PMID and usable pdf_hash
+        List[Tuple[str, str]]: (id type, value) pairs for the DOI, PMID, usable pdf_hash and arXiv id
         """
         paper = self.papers[str(paper_id)]
         keys = []
@@ -319,6 +443,8 @@ class PDData:
             keys.append(("pmid", paper.pmid))
         if paper.pdf_hash is not None and paper.pdf_hash not in self.multi_doi_pdf_hashes:
             keys.append(("pdf_hash", paper.pdf_hash))
+        if paper.arxiv_id is not None:
+            keys.append(("arxiv_id", paper.arxiv_id))
         return keys
 
     @staticmethod
@@ -426,6 +552,12 @@ class PDData:
         ):
             # same pdf hash - same paper, unless the PDF holds several DOI'd items
             return CLUSTER_SEEDS_LOOKUP["require"]
+        elif paper_1.arxiv_id is not None and paper_2.arxiv_id is not None and paper_1.arxiv_id == paper_2.arxiv_id:
+            # same arXiv id - same paper. arXiv-only records carry no DOI (S2 does not derive
+            # 10.48550/arXiv.<id>), so an ArXiv record (source_id=<id>) and a DBLP record for the
+            # same paper (doi=10.48550/arXiv.<id>) otherwise share no hard identifier and fall to
+            # the fuzzy model, which misses on short titles (e.g. "Olmo 3"). See allenai/scholar#41736.
+            return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_uris
             and paper_2.source_uris
@@ -453,8 +585,161 @@ class PDData:
         ):
             # same source but different ids: can't be the same paper
             return CLUSTER_SEEDS_LOOKUP["disallow"]
+        elif (paper_id_1 in self.correction_notices) != (paper_id_2 in self.correction_notices):
+            # a correction notice and the paper it corrects share title, authors and venue,
+            # but are different works (allenai/scholar#42255); shared identifiers still merge
+            return CLUSTER_SEEDS_LOOKUP["disallow"]
         else:
             return None
+
+    def block_pair_rules(self, paper_ids: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+        """Finds the pairs of one block that constraint rules match by index, not by array.
+
+        Both rules match few pairs, so constraint_values looks them up here once per block
+        instead of once per chunk of pairs.
+
+        Parameters
+        ----------
+        paper_ids: List[str]
+            the block's paper ids
+
+        Returns
+        -------
+        np.ndarray: condensed offsets of pairs with the same source URI and title, whose
+            strong signals agree
+        np.ndarray: condensed offsets of pairs the cluster seeds disallow
+        """
+        papers = [self.papers[str(paper_id)] for paper_id in paper_ids]
+        n = len(papers)
+
+        def offsets(pairs: List[Tuple[int, int]]) -> np.ndarray:
+            if not pairs:
+                return np.array([], dtype=np.int64)
+            i, j = np.array(pairs, dtype=np.int64).T
+            return condensed_offsets(np.minimum(i, j), np.maximum(i, j), n)
+
+        by_uri_and_title = defaultdict(list)
+        for position, paper in enumerate(papers):
+            if paper.source_uris and paper.title:
+                for uri in set(paper.source_uris):
+                    by_uri_and_title[(uri, paper.title)].append(position)
+        candidates = {
+            (members[a], members[b])
+            for members in by_uri_and_title.values()
+            for a in range(len(members))
+            for b in range(a + 1, len(members))
+        }
+        same_uri_and_title = [
+            (i, j) for i, j in sorted(candidates) if not _strong_signals_disagree(papers[i], papers[j])
+        ]
+
+        position = {paper_id: k for k, paper_id in enumerate(paper_ids)}
+        partners = self._disallow_partners()
+        disallowed = [
+            (position[paper_id], position[partner])
+            for paper_id in paper_ids
+            for partner in partners.get(paper_id, ())
+            if partner in position and partner != paper_id
+        ]
+        return offsets(same_uri_and_title), offsets(disallowed)
+
+    def _disallow_partners(self) -> Dict[str, Set[str]]:
+        """Each paper's disallowed partners, rebuilt only when the seed set changes."""
+        key = (id(self.cluster_seeds_disallow), len(self.cluster_seeds_disallow))
+        cached = getattr(self, "_disallow_partners_cache", None)
+        if cached is None or cached[0] != key:
+            partners: Dict[str, Set[str]] = defaultdict(set)
+            for paper_a, paper_b in self.cluster_seeds_disallow:
+                partners[paper_a].add(paper_b)
+                partners[paper_b].add(paper_a)
+            cached = (key, dict(partners))
+            self._disallow_partners_cache = cached
+        return cached[1]
+
+    def constraint_values(
+        self,
+        paper_ids: List[str],
+        left: np.ndarray,
+        right: np.ndarray,
+        first_offset: int = 0,
+        dont_merge_cluster_seeds: bool = True,
+        incremental_dont_use_cluster_seeds: bool = False,
+        pair_rules: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    ) -> np.ndarray:
+        """Applies get_constraint to many pairs of one block at once.
+
+        Pairs (left[k], right[k]) index into paper_ids, with left[k] < right[k], and are
+        consecutive entries of the block's condensed distance vector from first_offset on.
+        Each rule fills its pairs from the lowest precedence up, so the rule that
+        get_constraint checks first wins.
+
+        Parameters
+        ----------
+        paper_ids: List[str]
+            the block's paper ids
+        left: np.ndarray
+            the first paper of each pair
+        right: np.ndarray
+            the second paper of each pair
+        first_offset: int
+            the condensed offset of the first pair
+        dont_merge_cluster_seeds: bool
+            as for get_constraint
+        incremental_dont_use_cluster_seeds: bool
+            as for get_constraint
+        pair_rules: Tuple[np.ndarray, np.ndarray]
+            block_pair_rules(paper_ids), when the caller already has it for this block
+
+        Returns
+        -------
+        np.ndarray: the constraint value of each pair, NaN where get_constraint returns None
+        """
+        papers = [self.papers[str(paper_id)] for paper_id in paper_ids]
+        values = np.full(len(left), np.nan)
+        same_uri_and_title, disallowed = self.block_pair_rules(paper_ids) if pair_rules is None else pair_rules
+
+        def fill_offsets(offsets: np.ndarray, value: float):
+            # Rules that match few pairs are found by index, then placed by condensed offset.
+            offsets = offsets - first_offset
+            values[offsets[(offsets >= 0) & (offsets < len(values))]] = value
+
+        source = _codes([paper.source for paper in papers])
+        is_publisher = np.array([paper.source in PUBLISHER_SOURCES for paper in papers], dtype=bool)
+        source_id = _codes([paper.source_id for paper in papers])
+        same = (
+            (source_id[left] >= 0)
+            & (source_id[right] >= 0)
+            & (source[left] == source[right])
+            & is_publisher[left]
+            & (source_id[left] != source_id[right])
+        )
+        values[same] = CLUSTER_SEEDS_LOOKUP["disallow"]
+        notice = np.array([paper_id in self.correction_notices for paper_id in paper_ids], dtype=bool)
+        values[notice[left] != notice[right]] = CLUSTER_SEEDS_LOOKUP["disallow"]
+
+        # Same source URI and the same title.
+        fill_offsets(same_uri_and_title, CLUSTER_SEEDS_LOOKUP["require"])
+
+        pdf_hash = _codes(
+            [paper.pdf_hash if paper.pdf_hash not in self.multi_doi_pdf_hashes else None for paper in papers]
+        )
+        for codes in (
+            _codes([paper.arxiv_id for paper in papers]),
+            pdf_hash,
+            _codes([paper.pmid for paper in papers]),
+            _codes([paper.doi for paper in papers]),
+        ):
+            values[(codes[left] >= 0) & (codes[left] == codes[right])] = CLUSTER_SEEDS_LOOKUP["require"]
+
+        seed = _codes([self.cluster_seeds_require.get(paper_id) for paper_id in paper_ids])
+        both_seeded = (seed[left] >= 0) & (seed[right] >= 0)
+        if dont_merge_cluster_seeds:
+            values[both_seeded & (seed[left] != seed[right])] = CLUSTER_SEEDS_LOOKUP["disallow"]
+        if not incremental_dont_use_cluster_seeds:
+            values[both_seeded & (seed[left] == seed[right])] = CLUSTER_SEEDS_LOOKUP["require"]
+
+        fill_offsets(disallowed, CLUSTER_SEEDS_LOOKUP["disallow"])
+        return values
 
     def get_blocks(self) -> Dict[str, List[str]]:
         """
@@ -817,12 +1102,7 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         title_lower_simple = ""
     else:
         title_lower_simple = paper.title.lower().replace(" ", "")
-    paper = paper._replace(
-        title=title,
-        # title_ngrams_words=get_text_ngrams_words(title, stopwords=None),
-        title_ngrams_chars=get_text_ngrams(title_lower_simple, stopwords=None, use_bigrams=False),
-        abstract_ngrams_words=get_text_ngrams_words(abstract, stopwords=None),
-    )
+    paper = paper._replace(title=title, title_ngram_text=title_lower_simple, abstract_ngram_text=abstract)
     venue = normalize_venue_name(paper.venue)
     journal_name = normalize_venue_name(paper.journal_name)
     if venue != journal_name:
@@ -832,22 +1112,49 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
     # sometimes venues have no letters a-z, in which case it's just page numbers
     if A_THROUGH_Z.search(combined_venue) is None:
         combined_venue = ""
-    venue_ngrams = get_text_ngrams(combined_venue, stopwords=None, use_bigrams=True)
-    paper = paper._replace(venue=venue, journal_name=journal_name, venue_ngrams=venue_ngrams)
+    paper = paper._replace(venue=venue, journal_name=journal_name, venue_ngram_text=combined_venue)
 
     authors = [preprocess_authors(author) for author in paper.authors]
-    author_info_coauthor_n_grams = get_text_ngrams(
-        " ".join([i.author_info_full_name for i in authors]),
-        stopwords=None,
-        use_unigrams=True,
-        use_bigrams=True,
-    )
     paper = paper._replace(
         authors=authors,
-        author_info_coauthor_n_grams=author_info_coauthor_n_grams,
+        coauthor_ngram_text=" ".join([i.author_info_full_name for i in authors]),
     )
 
     return (key, paper)
+
+
+def with_counters(paper: Paper) -> Paper:
+    """Fills a preprocessed paper's empty n-gram counters from its n-gram texts.
+
+    Parameters
+    ----------
+    paper: Paper
+        a preprocessed paper; counters it already holds are kept
+
+    Returns
+    -------
+    Paper: the paper with every n-gram counter set
+    """
+    return paper._replace(
+        title_ngrams_chars=paper.title_ngrams_chars
+        if paper.title_ngrams_chars is not None
+        else get_text_ngrams(paper.title_ngram_text, stopwords=None, use_bigrams=False),
+        abstract_ngrams_words=paper.abstract_ngrams_words
+        if paper.abstract_ngrams_words is not None
+        else get_text_ngrams_words(paper.abstract_ngram_text, stopwords=None),
+        venue_ngrams=paper.venue_ngrams
+        if paper.venue_ngrams is not None
+        else get_text_ngrams(paper.venue_ngram_text, stopwords=None, use_bigrams=True),
+        author_info_coauthor_n_grams=paper.author_info_coauthor_n_grams
+        if paper.author_info_coauthor_n_grams is not None
+        else get_text_ngrams(paper.coauthor_ngram_text, stopwords=None, use_unigrams=True, use_bigrams=True),
+    )
+
+
+# Below this many papers, starting a process pool costs more than it saves: about 4 s on
+# Windows for a 1,500-paper request that preprocesses in under 1.5 s on one process. s2and
+# uses the same threshold for its parallel builds.
+PREPROCESS_POOL_MIN_PAPERS = 20000
 
 
 def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
@@ -859,7 +1166,7 @@ def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
     papers_dict: Dict
         the papers dictionary
     n_jobs: int
-        how many cpus to use
+        how many cpus to use, for at least PREPROCESS_POOL_MIN_PAPERS papers
 
     Returns
     -------
@@ -867,7 +1174,7 @@ def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
     """
 
     output = {}
-    if n_jobs > 1:
+    if n_jobs > 1 and len(papers_dict) >= PREPROCESS_POOL_MIN_PAPERS:
         with multiprocessing.Pool(processes=n_jobs) as p:
             _max = len(papers_dict)
             with tqdm(total=_max, desc="Preprocessing papers") as pbar:

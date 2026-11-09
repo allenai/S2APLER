@@ -3,7 +3,8 @@
 The s2apler native extension (`s2apler._s2apler_rust`) includes code copied and adapted from
 S2AND's native extension (`s2and._s2and_rust`): the sparse counter and its Jaccard overlap
 (`src/counter.rs`), the string similarity functions (`src/text.rs`), the thread-pool cache
-(`src/rayon_pool.rs`) and the build script (`build.rs`). Its upstream project is
+(`src/rayon_pool.rs`), the build script (`build.rs`), and the LightGBM row keys and zero
+window of its booster (`src/distinct_rows.rs`). Its upstream project is
 <https://github.com/allenai/S2AND>. S2AND is distributed under the MIT License:
 
 ```text
