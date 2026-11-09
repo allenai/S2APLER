@@ -398,7 +398,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "s2apler_rust"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "ahash",
  "mimalloc",
