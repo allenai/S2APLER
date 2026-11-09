@@ -8,9 +8,10 @@ one source archive and wheels for Linux (manylinux x86_64 and aarch64, musllinux
 
 1. Set `VERSION`, run `uv run python scripts/sync_version.py`, then `uv sync --extra dev`.
 2. Run `uv run --no-project python scripts/run_ci_locally.py`, and merge the change to `main`.
-3. Dispatch `.github/workflows/release-rust.yml` from the reviewed `main` commit.
+3. The merge starts `.github/workflows/release-rust.yml`, because it changes `VERSION`. A manual
+   dispatch from `main` runs it too.
    - Its validate job runs `scripts/run_ci_locally.py`, the same checks as pull-request CI.
-   - It fails when PyPI already has the `s2apler` version.
+   - A push whose version PyPI already has releases nothing; a manual run fails on that version.
    - Every wheel and the source archive must keep their license notices
      (`scripts/verification/verify_rust_distribution_licenses.py`) and import in a clean
      environment (`scripts/verification/smoke_installed_rust_api.py`).
