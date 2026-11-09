@@ -139,7 +139,6 @@ def test_clusterer_distances_match_lightgbm(monkeypatch):
         featurizer_info=FeaturizationInfo(features_to_use=["year_diff", "title_similarity"]),
         classifier=lightgbm_model,
         n_jobs=1,
-        use_cache=False,
     )
     blocks = {key: papers for key, papers in dataset.get_blocks().items() if len(papers) > 2}
     native = clusterer.make_distance_matrices(blocks, dataset, disable_tqdm=True)

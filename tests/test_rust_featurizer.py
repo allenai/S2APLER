@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 
 from s2apler import __version__
-from s2apler.consts import DEFAULT_CHUNK_SIZE
 from s2apler.data import PDData
 from s2apler.featurizer import (
     NUM_FEATURES,
@@ -103,7 +102,7 @@ def test_many_pairs_featurize_backends_agree(nan_value):
     pairs[5] = (pairs[5][0], pairs[5][1], -1)
     info = FeaturizationInfo()
     outputs = [
-        many_pairs_featurize(pairs, dataset, info, 1, False, DEFAULT_CHUNK_SIZE, info, nan_value, backend=backend)
+        many_pairs_featurize(pairs, dataset, info, 1, nan_value=nan_value, backend=backend)
         for backend in ("python", "rust")
     ]
     for python_array, rust_array in zip(outputs[0], outputs[1]):
@@ -113,7 +112,7 @@ def test_many_pairs_featurize_backends_agree(nan_value):
 def test_rejects_unknown_backend():
     dataset = edge_dataset()
     with pytest.raises(ValueError, match="backend"):
-        many_pairs_featurize([("1", "2", np.nan)], dataset, FeaturizationInfo(), 1, False, 10, backend="java")
+        many_pairs_featurize([("1", "2", np.nan)], dataset, FeaturizationInfo(), 1, backend="java")
 
 
 def test_extension_reports_its_feature_count():
@@ -170,19 +169,3 @@ def test_matches_python_for_every_thread_setting(n_jobs):
     dataset = edge_dataset()
     pairs = list(combinations(sorted(dataset.papers), 2))
     assert_bit_identical(python_features(dataset, pairs), rust_pair_features(dataset.papers, pairs, n_jobs))
-
-
-def test_feature_cache_round_trips(tmp_path, monkeypatch):
-    import s2apler.featurizer as featurizer
-
-    monkeypatch.setattr(featurizer, "CACHE_ROOT", tmp_path)
-    monkeypatch.setattr(featurizer, "CACHED_FEATURES", {})
-    dataset = PDData("tests/test_dataset/papers.json", name="cache_test", mode="inference")
-    pairs = dataset.all_pairs()[:500]
-    info = FeaturizationInfo()
-    fresh = many_pairs_featurize(pairs, dataset, info, 1, True, DEFAULT_CHUNK_SIZE)
-    featurizer.CACHED_FEATURES.clear()
-    from_disk = many_pairs_featurize(pairs, dataset, info, 1, True, DEFAULT_CHUNK_SIZE, backend="python")
-    for first, second in zip(fresh, from_disk):
-        if first is not None:
-            assert_bit_identical(first, second)

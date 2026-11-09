@@ -1,5 +1,4 @@
 import numpy as np
-from pathlib import Path
 import s2apler
 import os
 import json
@@ -33,10 +32,6 @@ if CONFIG.get("main_data_dir", UNSET_DATA_DIR) == UNSET_DATA_DIR:
 elif not os.path.exists(CONFIG["main_data_dir"]):
     # Only an explicitly configured directory must exist; catch typos at import.
     raise FileNotFoundError(f"The `main_data_dir` in data/path_config.json doesn't exist: {CONFIG['main_data_dir']}")
-
-# feature caching related consts
-CACHE_ROOT = Path(os.getenv("S2APLER_CACHE", str(Path.home() / ".s2apler")))
-FEATURIZER_VERSION = 1
 
 # important constant values
 NUMPY_NAN = np.nan

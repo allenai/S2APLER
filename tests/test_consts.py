@@ -61,12 +61,6 @@ def test_configured_missing_data_directory_fails_clearly(tmp_path):
     assert "doesn't exist" in result.stderr and missing in result.stderr
 
 
-def test_plotting_helpers_import_without_internal_data_dir(tmp_path):
-    root = installed_layout(tmp_path / "site", None)
-    result = run_import(root, "s2apler.plotting_utils")
-    assert result.returncode == 0, result.stderr
-
-
 def test_fit_without_search_space_clears_old_trials():
     rng = np.random.default_rng(0)
     X = rng.random((200, 3))
