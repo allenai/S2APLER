@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 
 from s2apler.data import PDData
-from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
+from s2apler.featurizer import NUM_FEATURES, FeaturizationInfo, featurize, many_pairs_featurize
 
 
 class TestData(unittest.TestCase):
@@ -53,11 +53,9 @@ class TestData(unittest.TestCase):
         # A negative label marks a pair as partially supervised.
         test_pairs.append((test_pairs[0][0], test_pairs[0][1], -1))
 
-        # single thread
-        features, labels, _ = many_pairs_featurize(test_pairs, self.dataset, self.featurizer, 1, False, 1, nan_value=-1)
-        # multi thread: currently broken???
-        # TODO: fix the multithreading global issue...
-        features, _, _ = many_pairs_featurize(test_pairs, self.dataset, self.featurizer, 2, False, 1, nan_value=-1)
+        features, labels = many_pairs_featurize(test_pairs, self.dataset, self.featurizer, 1, nan_value=-1)
+        threaded, _ = many_pairs_featurize(test_pairs, self.dataset, self.featurizer, 2, nan_value=-1)
+        assert np.array_equal(features, threaded)
 
         expected_features_1 = [
             -1.0,
@@ -122,3 +120,39 @@ class TestData(unittest.TestCase):
         self.check_features_array_equal(list(features[0, :]), expected_features_1)
         self.check_features_array_equal(list(features[1, :]), expected_features_2)
         self.check_features_array_equal(list(features[2, :]), expected_features_3)
+
+    def test_featurize_returns_features_for_the_block_split(self):
+        self.dataset.train_pairs_size = 400
+        self.dataset.val_pairs_size = 100
+        self.dataset.test_pairs_size = 100
+        train, val, test = featurize(self.dataset, self.featurizer, n_jobs=2, nan_value=-1)
+        # featurize must featurize exactly the pairs that the block split samples.
+        pairs = self.dataset.split_pairs(*self.dataset.split_cluster_papers())
+        assert all(len(split_pairs) > 0 for split_pairs in pairs)
+        for (features, labels), split_pairs in zip([train, val, test], pairs):
+            expected_features, expected_labels = many_pairs_featurize(
+                split_pairs, self.dataset, self.featurizer, 1, nan_value=-1
+            )
+            assert features.shape == (len(split_pairs), NUM_FEATURES)
+            assert np.array_equal(features, expected_features)
+            assert np.array_equal(labels, expected_labels)
+            assert set(np.unique(labels)) <= {0, 1}
+            assert not np.isnan(features).any()
+        # Blocks don't straddle splits, so no pair appears in two of them.
+        train_ids, val_ids, test_ids = ({p for pair in split for p in pair[:2]} for split in pairs)
+        assert not (train_ids & val_ids or train_ids & test_ids or val_ids & test_ids)
+
+    def test_featurize_rejects_inference_datasets(self):
+        dataset = PDData("tests/test_dataset/papers.json", name="test_dataset", mode="inference")
+        with self.assertRaisesRegex(ValueError, "train-mode"):
+            featurize(dataset, self.featurizer)
+
+    def test_features_to_use_keeps_the_chosen_groups_columns(self):
+        pairs = self.dataset.all_pairs()[:300]
+        full, _ = many_pairs_featurize(pairs, self.dataset, self.featurizer, 1)
+        subset_info = FeaturizationInfo(features_to_use=["year_diff", "title_similarity"])
+        subset, _ = many_pairs_featurize(pairs, self.dataset, subset_info, 1)
+        columns = [self.featurizer.feature_names.index(name) for name in subset_info.feature_names]
+        assert subset_info.feature_names[0] == "year_diff"
+        assert subset_info.number_of_features == len(columns) == subset.shape[1]
+        assert np.array_equal(subset, full[:, columns], equal_nan=True)

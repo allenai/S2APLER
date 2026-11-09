@@ -33,7 +33,6 @@ class TestClusterer(unittest.TestCase):
                 X_random, y_random
             ),
             n_jobs=1,
-            use_cache=False,
             use_default_constraints_as_supervision=True,
         )
 
