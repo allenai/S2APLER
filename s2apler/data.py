@@ -30,6 +30,8 @@ from s2apler.text import (
     NAME_PREFIXES,
     A_THROUGH_Z,
     PUBLISHER_SOURCES,
+    is_correction_notice,
+    marks_notice_identifiers,
 )
 
 logger = logging.getLogger("s2apler")
@@ -311,6 +313,7 @@ class PDData:
         self.papers = preprocess_papers_parallel(self.papers, self.n_jobs)
         logger.debug("preprocessed papers")
         self.multi_doi_pdf_hashes = self.get_multi_doi_pdf_hashes()
+        self.correction_notices = self.get_correction_notices()
 
     def get_multi_doi_pdf_hashes(self) -> Set[str]:
         """Finds pdf_hashes shared by papers that carry different DOIs.
@@ -329,6 +332,40 @@ class PDData:
             if paper.pdf_hash is not None and paper.doi is not None:
                 dois_by_hash[paper.pdf_hash].add(paper.doi)
         return {pdf_hash for pdf_hash, dois in dois_by_hash.items() if len(dois) > 1}
+
+    def get_correction_notices(self) -> Set[str]:
+        """Finds the papers that are correction notices.
+
+        A notice's copies from other sources often drop the "Correction:" prefix, and its PDF
+        often carries the article's title. Papers linked by a shared DOI, PMID or usable
+        pdf_hash end up in one cluster anyway, so when any of them is a "Correction: X" paper,
+        all of them are notices.
+
+        Returns
+        -------
+        Set[str]: ids of the papers that are correction notices
+        """
+        parent = {paper_id: paper_id for paper_id in self.papers}
+
+        def find(paper_id: str) -> str:
+            while parent[paper_id] != paper_id:
+                parent[paper_id] = parent[parent[paper_id]]
+                paper_id = parent[paper_id]
+            return paper_id
+
+        first_with_key: Dict[Tuple[str, str], str] = {}
+        for paper_id in self.papers:
+            for key in self.id_merge_keys(paper_id):
+                if key in first_with_key:
+                    parent[find(paper_id)] = find(first_with_key[key])
+                else:
+                    first_with_key[key] = paper_id
+        notice_roots = {find(pid) for pid, paper in self.papers.items() if marks_notice_identifiers(paper.title)}
+        return {
+            paper_id
+            for paper_id, paper in self.papers.items()
+            if is_correction_notice(paper.title) or find(paper_id) in notice_roots
+        }
 
     def id_merge_keys(self, paper_id: str) -> List[Tuple[str, str]]:
         """Lists the identifiers that force a paper into the same cluster as others.
@@ -484,6 +521,10 @@ class PDData:
         ):
             # same source but different ids: can't be the same paper
             return CLUSTER_SEEDS_LOOKUP["disallow"]
+        elif (paper_id_1 in self.correction_notices) != (paper_id_2 in self.correction_notices):
+            # a correction notice and the paper it corrects share title, authors and venue,
+            # but are different works (allenai/scholar#42255); shared identifiers still merge
+            return CLUSTER_SEEDS_LOOKUP["disallow"]
         else:
             return None
 
@@ -609,6 +650,8 @@ class PDData:
             & (source_id[left] != source_id[right])
         )
         values[same] = CLUSTER_SEEDS_LOOKUP["disallow"]
+        notice = np.array([paper_id in self.correction_notices for paper_id in paper_ids], dtype=bool)
+        values[notice[left] != notice[right]] = CLUSTER_SEEDS_LOOKUP["disallow"]
 
         # Same source URI and the same title.
         fill_offsets(same_uri_and_title, CLUSTER_SEEDS_LOOKUP["require"])

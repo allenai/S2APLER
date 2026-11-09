@@ -94,6 +94,12 @@ def _join_clusters_by_ids(
         only null-title papers are numbered from first_null_label in order of appearance
     """
     parent = {label: label for label in labels}
+    # A pair the cluster seeds disallow never joins, even through a shared identifier, so a
+    # split pinned by a seed stays split.
+    partners = dataset._disallow_partners() if dataset.cluster_seeds_disallow else {}
+    members: Dict[int, List[str]] = defaultdict(list)
+    for paper_id, label in zip(paper_ids, labels):
+        members[label].append(paper_id)
 
     def find(label: int) -> int:
         while parent[label] != label:
@@ -108,7 +114,13 @@ def _join_clusters_by_ids(
         # A root below first_null_label means the group already holds a titled cluster.
         if not may_join_titled and root_a < first_null_label and root_b < first_null_label:
             return
-        parent[max(root_a, root_b)] = min(root_a, root_b)
+        if partners:
+            others = set(members[root_b])
+            if any(partner in others for paper_id in members[root_a] for partner in partners.get(paper_id, ())):
+                return
+        kept, merged = min(root_a, root_b), max(root_a, root_b)
+        parent[merged] = kept
+        members[kept].extend(members.pop(merged))
 
     first_label_for_key: Dict[Tuple[str, str], int] = {}
     for paper_id, label in zip(paper_ids, labels):
