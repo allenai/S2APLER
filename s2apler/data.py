@@ -106,6 +106,21 @@ def normalize_doi(doi: Optional[str]) -> Optional[str]:
     return doi.strip().lower() or None
 
 
+def _codes(values: List[Any]) -> np.ndarray:
+    """Integer codes for hashable values, equal codes for equal values; None becomes -1."""
+    table: Dict[Any, int] = {}
+    return np.fromiter(
+        (-1 if value is None else table.setdefault(value, len(table)) for value in values),
+        dtype=np.int64,
+        count=len(values),
+    )
+
+
+def condensed_offsets(i: np.ndarray, j: np.ndarray, n: int) -> np.ndarray:
+    """Positions of pairs (i, j), i < j, in a condensed n-by-n distance vector."""
+    return i * n - i * (i + 1) // 2 + (j - i - 1)
+
+
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
     """True if any of {DOI, PMID, first-author last name} are populated on both
     papers and conflict. Used to gate URL+title-based hard merge: see allenai/scholar#41863."""
@@ -453,6 +468,106 @@ class PDData:
             return CLUSTER_SEEDS_LOOKUP["disallow"]
         else:
             return None
+
+    def constraint_values(
+        self,
+        paper_ids: List[str],
+        left: np.ndarray,
+        right: np.ndarray,
+        first_offset: int = 0,
+        dont_merge_cluster_seeds: bool = True,
+        incremental_dont_use_cluster_seeds: bool = False,
+    ) -> np.ndarray:
+        """Applies get_constraint to many pairs of one block at once.
+
+        Pairs (left[k], right[k]) index into paper_ids, with left[k] < right[k], and are
+        consecutive entries of the block's condensed distance vector from first_offset on.
+        Each rule fills its pairs from the lowest precedence up, so the rule that
+        get_constraint checks first wins.
+
+        Parameters
+        ----------
+        paper_ids: List[str]
+            the block's paper ids
+        left: np.ndarray
+            the first paper of each pair
+        right: np.ndarray
+            the second paper of each pair
+        first_offset: int
+            the condensed offset of the first pair
+        dont_merge_cluster_seeds: bool
+            as for get_constraint
+        incremental_dont_use_cluster_seeds: bool
+            as for get_constraint
+
+        Returns
+        -------
+        np.ndarray: the constraint value of each pair, NaN where get_constraint returns None
+        """
+        papers = [self.papers[str(paper_id)] for paper_id in paper_ids]
+        n = len(papers)
+        values = np.full(len(left), np.nan)
+
+        def fill_pairs(pairs: List[Tuple[int, int]], value: float):
+            # Rules that match few pairs are found by index, then placed by condensed offset.
+            if not pairs:
+                return
+            i, j = np.array(pairs).T
+            offsets = condensed_offsets(np.minimum(i, j), np.maximum(i, j), n) - first_offset
+            values[offsets[(offsets >= 0) & (offsets < len(values))]] = value
+
+        source = _codes([paper.source for paper in papers])
+        is_publisher = np.array([paper.source in PUBLISHER_SOURCES for paper in papers], dtype=bool)
+        source_id = _codes([paper.source_id for paper in papers])
+        same = (
+            (source_id[left] >= 0)
+            & (source_id[right] >= 0)
+            & (source[left] == source[right])
+            & is_publisher[left]
+            & (source_id[left] != source_id[right])
+        )
+        values[same] = CLUSTER_SEEDS_LOOKUP["disallow"]
+
+        # Same source URI and the same title: candidates come from a (URI, title) index.
+        by_uri_and_title = defaultdict(list)
+        for position, paper in enumerate(papers):
+            if paper.source_uris and paper.title:
+                for uri in set(paper.source_uris):
+                    by_uri_and_title[(uri, paper.title)].append(position)
+        candidates = {
+            (members[a], members[b])
+            for members in by_uri_and_title.values()
+            for a in range(len(members))
+            for b in range(a + 1, len(members))
+        }
+        fill_pairs(
+            [(i, j) for i, j in sorted(candidates) if not _strong_signals_disagree(papers[i], papers[j])],
+            CLUSTER_SEEDS_LOOKUP["require"],
+        )
+
+        pdf_hash = _codes(
+            [paper.pdf_hash if paper.pdf_hash not in self.multi_doi_pdf_hashes else None for paper in papers]
+        )
+        for codes in (pdf_hash, _codes([paper.pmid for paper in papers]), _codes([paper.doi for paper in papers])):
+            values[(codes[left] >= 0) & (codes[left] == codes[right])] = CLUSTER_SEEDS_LOOKUP["require"]
+
+        seed = _codes([self.cluster_seeds_require.get(paper_id) for paper_id in paper_ids])
+        both_seeded = (seed[left] >= 0) & (seed[right] >= 0)
+        if dont_merge_cluster_seeds:
+            values[both_seeded & (seed[left] != seed[right])] = CLUSTER_SEEDS_LOOKUP["disallow"]
+        if not incremental_dont_use_cluster_seeds:
+            values[both_seeded & (seed[left] == seed[right])] = CLUSTER_SEEDS_LOOKUP["require"]
+
+        position = {paper_id: k for k, paper_id in enumerate(paper_ids)}
+        fill_pairs(
+            [
+                (position[a], position[b])
+                for a, b in self.cluster_seeds_disallow
+                if a in position and b in position and a != b
+            ],
+            CLUSTER_SEEDS_LOOKUP["disallow"],
+        )
+        return values
 
     def get_blocks(self) -> Dict[str, List[str]]:
         """
@@ -848,6 +963,12 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
     return (key, paper)
 
 
+# Below this many papers, starting a process pool costs more than it saves: about 4 s on
+# Windows for a 1,500-paper request that preprocesses in under 1.5 s on one process. s2and
+# uses the same threshold for its parallel builds.
+PREPROCESS_POOL_MIN_PAPERS = 20000
+
+
 def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
     """
     helper function to preprocess papers
@@ -857,7 +978,7 @@ def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
     papers_dict: Dict
         the papers dictionary
     n_jobs: int
-        how many cpus to use
+        how many cpus to use, for at least PREPROCESS_POOL_MIN_PAPERS papers
 
     Returns
     -------
@@ -865,7 +986,7 @@ def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
     """
 
     output = {}
-    if n_jobs > 1:
+    if n_jobs > 1 and len(papers_dict) >= PREPROCESS_POOL_MIN_PAPERS:
         with multiprocessing.Pool(processes=n_jobs) as p:
             _max = len(papers_dict)
             with tqdm(total=_max, desc="Preprocessing papers") as pbar:

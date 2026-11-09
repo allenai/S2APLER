@@ -368,13 +368,30 @@ def rust_pair_features(papers: Dict[str, Paper], pairs: List[Tuple[str, str]], n
     """
     paper_ids = list(dict.fromkeys(paper_id for pair in pairs for paper_id in pair))
     position = {paper_id: i for i, paper_id in enumerate(paper_ids)}
-    intern = _Interner()
-    featurizer = load_s2apler_rust_extension().PaperFeaturizer(
-        [rust_paper_record(papers[str(paper_id)], intern) for paper_id in paper_ids]
-    )
+    featurizer = paper_featurizer(papers, paper_ids)
     left = np.fromiter((position[a] for a, _ in pairs), dtype=np.uint32, count=len(pairs))
     right = np.fromiter((position[b] for _, b in pairs), dtype=np.uint32, count=len(pairs))
     return featurizer.featurize(left, right, num_threads=resolve_n_jobs(n_jobs) if n_jobs != 0 else 1)
+
+
+def paper_featurizer(papers: Dict[str, Paper], paper_ids: List[str]) -> Any:
+    """Packs papers once into the native featurizer, which then takes pairs by position.
+
+    Parameters
+    ----------
+    papers: Dict[str, Paper]
+        preprocessed papers by id
+    paper_ids: List[str]
+        the papers to pack; a paper's position in this list is its position in pairs
+
+    Returns
+    -------
+    PaperFeaturizer: the native featurizer
+    """
+    intern = _Interner()
+    return load_s2apler_rust_extension().PaperFeaturizer(
+        [rust_paper_record(papers[str(paper_id)], intern) for paper_id in paper_ids]
+    )
 
 
 def many_pairs_featurize(

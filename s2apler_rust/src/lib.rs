@@ -1,16 +1,20 @@
-//! S2APLER's native extension: Rust pair featurization.
+//! S2APLER's native extension: Rust pair featurization, and grouping of rows that a LightGBM
+//! model scores identically.
 //!
 //! The counter, string-similarity, thread-pool and build modules come from s2and's extension;
 //! see THIRD_PARTY_NOTICES.md.
 
 use numpy::ndarray::Array2;
-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray1};
+use numpy::{
+    IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::prelude::*;
 
 mod counter;
+mod distinct_rows;
 mod paper_features;
 mod rayon_pool;
 mod text;
@@ -202,6 +206,46 @@ impl PaperFeaturizer {
     }
 }
 
+/// Groups rows that a numerical LightGBM model scores identically; see `distinct_rows`.
+///
+/// `thresholds` holds one list per column of `rows`, empty for columns that no split uses. Returns the first row of each group and each row's group, as uint32 arrays, or
+/// `None` when a column has too many thresholds.
+#[pyfunction]
+#[pyo3(signature = (rows, thresholds, num_threads=None))]
+#[allow(clippy::type_complexity)]
+fn distinct_bin_rows<'py>(
+    py: Python<'py>,
+    rows: PyReadonlyArray2<'py, f64>,
+    thresholds: Vec<Vec<f64>>,
+    num_threads: Option<usize>,
+) -> PyResult<Option<(Bound<'py, PyArray1<u32>>, Bound<'py, PyArray1<u32>>)>> {
+    let shape = rows.shape();
+    if shape[1] != thresholds.len() {
+        return Err(PyValueError::new_err(format!(
+            "expected one threshold list per column: {} columns, {} lists",
+            shape[1],
+            thresholds.len()
+        )));
+    }
+    if shape[0] > u32::MAX as usize {
+        return Err(PyValueError::new_err("too many rows for uint32 indices"));
+    }
+    if thresholds
+        .iter()
+        .flatten()
+        .any(|threshold| threshold.is_nan())
+    {
+        return Err(PyValueError::new_err("thresholds must not be NaN"));
+    }
+    // Keys are computed with the GIL held, so no Python thread can change the rows meanwhile;
+    // copying them first would cost more than the key pass saves.
+    let values = rows.as_slice()?;
+    let grouped = install_with_optional_rayon_pool(Some(num_threads.unwrap_or(1).max(1)), || {
+        distinct_rows::distinct_rows(values, thresholds)
+    });
+    Ok(grouped.map(|(first, inverse)| (first.into_pyarray(py), inverse.into_pyarray(py))))
+}
+
 /// Build metadata: the crate version and a digest of the native sources, for freshness checks.
 #[pyfunction]
 fn get_build_info(py: Python<'_>) -> PyResult<Py<PyDict>> {
@@ -217,6 +261,7 @@ fn get_build_info(py: Python<'_>) -> PyResult<Py<PyDict>> {
 fn _s2apler_rust(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(get_build_info, m)?)?;
+    m.add_function(wrap_pyfunction!(distinct_bin_rows, m)?)?;
     m.add_class::<PaperFeaturizer>()?;
     Ok(())
 }
