@@ -87,6 +87,26 @@ def test_matches_python_on_edge_cases():
     assert_bit_identical(python_features(dataset, pairs), rust_pair_features(dataset.papers, pairs, 2))
 
 
+def test_preprocessing_makes_every_title_ascii():
+    papers = {
+        "1": {"title": "\u00dcber caf\u00e9 \u2014 \u6f22\u5b57 na\u00efve \\alpha $x^2$", "authors": [], "block": "b"},
+        "2": {"title": "\u00a0\u2003\u03a9mega\ttitle\x00", "authors": [], "block": "b"},
+    }
+    dataset = PDData(papers=papers, name="unicode", mode="inference")
+    assert all(paper.title.isascii() and paper.title for paper in dataset.papers.values())
+    rust_pair_features(dataset.papers, [("1", "2")], 1)
+
+
+def test_rejects_titles_that_skipped_preprocessing():
+    dataset = edge_dataset()
+    paper_id = next(iter(dataset.papers))
+    # Title features compare bytes, which matches Python only on ASCII.
+    dataset.papers[paper_id] = dataset.papers[paper_id]._replace(title="caf\u00e9 au lait")
+    pairs = list(combinations(sorted(dataset.papers), 2))
+    with pytest.raises(ValueError, match="ASCII"):
+        rust_pair_features(dataset.papers, pairs, 1)
+
+
 def test_matches_python_on_every_test_dataset_pair():
     dataset = PDData("tests/test_dataset/papers.json", name="test_dataset", mode="inference")
     pairs = [(str(a), str(b)) for block in dataset.get_blocks().values() for a, b in combinations(block, 2)]

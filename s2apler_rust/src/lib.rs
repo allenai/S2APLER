@@ -99,6 +99,13 @@ fn record_from_input(input: PaperInput) -> PyResult<PaperRecord> {
             "title token flags must match the tokens",
         ));
     }
+    // Title features compare bytes, which matches Python only on ASCII. PDData's preprocessing
+    // makes every title ASCII, so anything else means the papers skipped it.
+    if !title_without_spaces.is_ascii() {
+        return Err(PyValueError::new_err(
+            "titles must be ASCII; preprocess papers with PDData",
+        ));
+    }
     for letters in &mut author_first_letters {
         letters.sort_unstable();
         letters.dedup();
