@@ -5,10 +5,15 @@ bit-identical to LightGBM's own. It is about 15x faster on one thread and 10x fa
 threads for S2APLER's production model.
 """
 
-from typing import Any, Dict
+import logging
+import weakref
+from typing import Any, Dict, Optional
 
+import lightgbm as lgb
 import numpy as np
 from s2and.runtime import load_s2and_rust_extension
+
+logger = logging.getLogger("s2apler")
 
 
 class NativeLightGBMClassifier:
@@ -78,3 +83,43 @@ class NativeLightGBMClassifier:
 
     def __setstate__(self, state: Dict[str, Any]):
         self.__init__(state["model_text"], state["num_threads"])
+
+
+# Native scorers by LightGBM booster. Converting dumps the whole model as text (about 18 MB for
+# the production model), so do it once per fit. Each fit makes a new booster, so a refit
+# classifier gets a fresh scorer, and the cache never keeps a booster alive.
+_NATIVE_SCORERS: "weakref.WeakKeyDictionary[Any, Optional[NativeLightGBMClassifier]]" = weakref.WeakKeyDictionary()
+
+
+def scoring_classifier(classifier: Any, num_threads: int) -> Any:
+    """Returns what to call `predict_proba` on: the native booster when it is exact, else `classifier`.
+
+    A fitted binary `LGBMClassifier` scores natively, with identical probabilities. Other
+    classifiers, and LightGBM models the native booster can't reproduce (multiclass, or with
+    prediction-time early stopping), score with their own `predict_proba`.
+
+    Parameters
+    ----------
+    classifier: Any
+        a fitted classifier
+    num_threads: int
+        how many threads the native booster scores with
+
+    Returns
+    -------
+    Any: an object with `predict_proba`
+    """
+    if not isinstance(classifier, lgb.LGBMClassifier):
+        return classifier
+    booster = classifier.booster_
+    if booster not in _NATIVE_SCORERS:
+        try:
+            _NATIVE_SCORERS[booster] = NativeLightGBMClassifier.from_lgbm(classifier, num_threads)
+        except ValueError as err:
+            logger.info(f"Scoring with LightGBM, not the native booster: {err}")
+            _NATIVE_SCORERS[booster] = None
+    native = _NATIVE_SCORERS[booster]
+    if native is None:
+        return classifier
+    native.num_threads = num_threads
+    return native
