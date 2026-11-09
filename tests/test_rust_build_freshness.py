@@ -149,6 +149,7 @@ def test_digest_rejects_linked_source_directories(tmp_path: Path, monkeypatch: p
     assert "INTERNALERROR" not in message
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="APFS refuses non-UTF-8 file names")
 def test_digest_rejects_unsupported_source_names_with_clear_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -452,14 +453,16 @@ def test_real_build_script_tracks_directories_and_current_package_root(tmp_path:
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"cargo:rustc-env=S2APLER_RUST_SOURCE_DIGEST={rust_source_digest(alternate)}" in result.stdout
 
-    invalid_source = _unsupported_source_path(alternate)
-    invalid_source.write_bytes(b"// unsupported path\n")
-    invalid = subprocess.run(
-        [str(build_script)], cwd=source, env=env, capture_output=True, text=True, check=False, timeout=30
-    )
-    assert invalid.returncode != 0
-    assert "native source paths must be valid UTF-8" in invalid.stderr
-    invalid_source.unlink()
+    # APFS refuses non-UTF-8 file names, so macOS can't hold the input this rejects.
+    if sys.platform != "darwin":
+        invalid_source = _unsupported_source_path(alternate)
+        invalid_source.write_bytes(b"// unsupported path\n")
+        invalid = subprocess.run(
+            [str(build_script)], cwd=source, env=env, capture_output=True, text=True, check=False, timeout=30
+        )
+        assert invalid.returncode != 0
+        assert "native source paths must be valid UTF-8" in invalid.stderr
+        invalid_source.unlink()
 
     external = tmp_path / "external"
     external.mkdir()

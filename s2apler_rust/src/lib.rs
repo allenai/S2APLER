@@ -22,7 +22,11 @@ use rayon_pool::install_with_optional_rayon_pool;
 // Parallel readers allocate on worker threads; with glibc malloc that slows
 // later kernels through arena contention, and mimalloc avoids it.
 // Cargo.toml explains the targets that keep the system allocator.
-#[cfg(not(any(target_env = "musl", all(target_os = "linux", target_arch = "aarch64"))))]
+#[cfg(not(any(
+    target_env = "musl",
+    target_os = "macos",
+    all(target_os = "linux", target_arch = "aarch64")
+)))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
