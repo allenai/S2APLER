@@ -1,4 +1,4 @@
-from typing import Tuple, List, Union, Dict, Any
+from typing import Tuple, List, Union, Dict, Any, Optional
 
 import numpy as np
 import logging
@@ -6,7 +6,7 @@ from collections import Counter
 
 from tqdm import tqdm
 
-from s2apler.data import PDData, Paper
+from s2apler.data import PDData, Paper, with_counters
 from s2apler.runtime import load_s2apler_rust_extension
 from s2and.thread_config import resolve_n_jobs
 from s2apler.consts import LARGE_INTEGER
@@ -153,9 +153,9 @@ global_dataset: Dict[str, Any] = {}
 
 
 def _set_global_dataset(papers: Dict[str, Any]):
-    """Sets the papers that _single_pair_featurize reads."""
+    """Sets the papers that _single_pair_featurize reads, with their n-gram counters built."""
     global global_dataset
-    global_dataset = papers
+    global_dataset = {paper_id: with_counters(paper) for paper_id, paper in papers.items()}
 
 
 def _single_pair_featurize(work_input: Tuple[str, str], index: int = -1) -> Tuple[List[Union[int, float]], int]:
@@ -299,30 +299,54 @@ def _counter_input(counter: Counter, intern: _Interner) -> Tuple[List[int], List
     return [intern(key) for key in counter], list(counter.values())
 
 
-def rust_paper_record(paper: Any, intern: _Interner) -> Tuple:
+def _text_input(text: Optional[str]) -> bytes:
+    if text is None:
+        raise ValueError("a paper has neither an n-gram Counter nor its text; preprocess papers with PDData")
+    # UTF-32 code points, so Rust needs no Unicode handling and lone surrogates survive.
+    return text.encode("utf-32-le", "surrogatepass")
+
+
+# Paper's n-gram counters, in the order PaperFeaturizer reads them.
+COUNTER_FIELDS = ("author_info_coauthor_n_grams", "venue_ngrams", "title_ngrams_chars", "abstract_ngrams_words")
+
+
+def rust_paper_record(paper: Any, intern: _Interner, from_text: Optional[Tuple[bool, ...]] = None) -> Tuple:
     """Packs one preprocessed paper into the record `PaperFeaturizer` reads.
 
     Each field holds exactly what `_single_pair_featurize` reads from the paper, so the Rust
     features match the Python ones. Strings become interned ids; equal ids mean equal strings.
+    An n-gram counter goes as its text, which Rust counts as `with_counters` would, or as the
+    paper's Counter.
 
     Parameters
     ----------
     paper: Paper
-        a preprocessed paper; preprocessing fills the counters and author letters that `Paper`
-        types as optional, and `_single_pair_featurize` relies on them the same way
+        a preprocessed paper; preprocessing fills the n-gram texts and author letters that
+        `Paper` types as optional, and `_single_pair_featurize` relies on them the same way
     intern: _Interner
         the interner shared by every paper in one featurizer
+    from_text: Tuple[bool, ...]
+        per COUNTER_FIELDS entry, whether to send the text; by default, wherever the paper
+        has no Counter. Every paper in one featurizer must make the same choice per counter.
 
     Returns
     -------
     Tuple: the nested record that `s2apler._s2apler_rust.PaperFeaturizer` extracts
     """
+    if from_text is None:
+        from_text = tuple(getattr(paper, field) is None for field in COUNTER_FIELDS)
     tokens = paper.title.split()
-    counters = (
-        _counter_input(paper.author_info_coauthor_n_grams, intern),
-        _counter_input(paper.venue_ngrams, intern),
-        _counter_input(paper.title_ngrams_chars, intern),
-        _counter_input(paper.abstract_ngrams_words, intern),
+    texts = (
+        paper.coauthor_ngram_text,
+        paper.venue_ngram_text,
+        paper.title_ngram_text,
+        # Python counts words of `text.split()`; joined by single spaces, a run of words is
+        # one contiguous slice, which is how Rust finds word n-grams.
+        " ".join(paper.abstract_ngram_text.split()) if from_text[3] and paper.abstract_ngram_text is not None else None,
+    )
+    counters = tuple(
+        _text_input(text) if text_mode else _counter_input(getattr(paper, field), intern)
+        for field, text_mode, text in zip(COUNTER_FIELDS, from_text, texts, strict=True)
     )
     title = (
         [intern(token) for token in tokens],
@@ -388,9 +412,15 @@ def paper_featurizer(papers: Dict[str, Paper], paper_ids: List[str]) -> Any:
     -------
     PaperFeaturizer: the native featurizer
     """
+    chosen = [papers[str(paper_id)] for paper_id in paper_ids]
+    # Rust counts a counter's n-grams from text unless some paper already holds that Counter.
+    # Then every paper sends its Counter, so all of them share one interner's ids.
+    from_text = tuple(all(getattr(paper, field) is None for paper in chosen) for field in COUNTER_FIELDS)
+    if not all(from_text):
+        chosen = [with_counters(paper) for paper in chosen]
     intern = _Interner()
     return load_s2apler_rust_extension().PaperFeaturizer(
-        [rust_paper_record(papers[str(paper_id)], intern) for paper_id in paper_ids]
+        [rust_paper_record(paper, intern, from_text) for paper in chosen]
     )
 
 

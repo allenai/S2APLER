@@ -69,6 +69,13 @@ class Paper(NamedTuple):
     source: Optional[str]
     block: Optional[str]
     source_uris: Optional[List[str]] = None
+    # The texts the n-gram counters above come from. Preprocessing keeps these and leaves the
+    # counters empty: the native featurizer counts n-grams itself, and with_counters builds
+    # the Counters when Python needs them.
+    title_ngram_text: Optional[str] = None
+    abstract_ngram_text: Optional[str] = None
+    venue_ngram_text: Optional[str] = None
+    coauthor_ngram_text: Optional[str] = None
 
 
 # Resolver URLs, with or without scheme or host prefix: https://doi.org/, http://dx.doi.org/, doi.org/.
@@ -930,12 +937,7 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         title_lower_simple = ""
     else:
         title_lower_simple = paper.title.lower().replace(" ", "")
-    paper = paper._replace(
-        title=title,
-        # title_ngrams_words=get_text_ngrams_words(title, stopwords=None),
-        title_ngrams_chars=get_text_ngrams(title_lower_simple, stopwords=None, use_bigrams=False),
-        abstract_ngrams_words=get_text_ngrams_words(abstract, stopwords=None),
-    )
+    paper = paper._replace(title=title, title_ngram_text=title_lower_simple, abstract_ngram_text=abstract)
     venue = normalize_venue_name(paper.venue)
     journal_name = normalize_venue_name(paper.journal_name)
     if venue != journal_name:
@@ -945,22 +947,43 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
     # sometimes venues have no letters a-z, in which case it's just page numbers
     if A_THROUGH_Z.search(combined_venue) is None:
         combined_venue = ""
-    venue_ngrams = get_text_ngrams(combined_venue, stopwords=None, use_bigrams=True)
-    paper = paper._replace(venue=venue, journal_name=journal_name, venue_ngrams=venue_ngrams)
+    paper = paper._replace(venue=venue, journal_name=journal_name, venue_ngram_text=combined_venue)
 
     authors = [preprocess_authors(author) for author in paper.authors]
-    author_info_coauthor_n_grams = get_text_ngrams(
-        " ".join([i.author_info_full_name for i in authors]),
-        stopwords=None,
-        use_unigrams=True,
-        use_bigrams=True,
-    )
     paper = paper._replace(
         authors=authors,
-        author_info_coauthor_n_grams=author_info_coauthor_n_grams,
+        coauthor_ngram_text=" ".join([i.author_info_full_name for i in authors]),
     )
 
     return (key, paper)
+
+
+def with_counters(paper: Paper) -> Paper:
+    """Fills a preprocessed paper's empty n-gram counters from its n-gram texts.
+
+    Parameters
+    ----------
+    paper: Paper
+        a preprocessed paper; counters it already holds are kept
+
+    Returns
+    -------
+    Paper: the paper with every n-gram counter set
+    """
+    return paper._replace(
+        title_ngrams_chars=paper.title_ngrams_chars
+        if paper.title_ngrams_chars is not None
+        else get_text_ngrams(paper.title_ngram_text, stopwords=None, use_bigrams=False),
+        abstract_ngrams_words=paper.abstract_ngrams_words
+        if paper.abstract_ngrams_words is not None
+        else get_text_ngrams_words(paper.abstract_ngram_text, stopwords=None),
+        venue_ngrams=paper.venue_ngrams
+        if paper.venue_ngrams is not None
+        else get_text_ngrams(paper.venue_ngram_text, stopwords=None, use_bigrams=True),
+        author_info_coauthor_n_grams=paper.author_info_coauthor_n_grams
+        if paper.author_info_coauthor_n_grams is not None
+        else get_text_ngrams(paper.coauthor_ngram_text, stopwords=None, use_unigrams=True, use_bigrams=True),
+    )
 
 
 # Below this many papers, starting a process pool costs more than it saves: about 4 s on

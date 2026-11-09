@@ -10,11 +10,13 @@ use numpy::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedBytes;
 use pyo3::types::PyDict;
 use rayon::prelude::*;
 
 mod counter;
 mod distinct_rows;
+mod ngrams;
 mod paper_features;
 mod rayon_pool;
 mod text;
@@ -35,7 +37,14 @@ use rayon_pool::install_with_optional_rayon_pool;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-type CounterInput = (Vec<u64>, Vec<u64>);
+/// An n-gram counter: interned ids and counts from Python, or the text for Rust to count.
+///
+/// The text is UTF-32-LE code points of the string Python's n-gram functions would read.
+#[derive(FromPyObject)]
+enum CounterInput {
+    Counts(Vec<u64>, Vec<u64>),
+    Text(PyBackedBytes),
+}
 /// Title tokens, numeral flags, numeral-preceding flags, special words, years, unspaced title.
 type TitleInput = (Vec<u32>, Vec<bool>, Vec<bool>, Vec<u32>, Vec<u32>, String);
 
@@ -54,7 +63,7 @@ struct PaperInput(
     Option<u32>,
 );
 
-fn counter_from_input((ids, counts): CounterInput) -> PyResult<Option<CounterData>> {
+fn counter_from_counts(ids: Vec<u64>, counts: Vec<u64>) -> PyResult<Option<CounterData>> {
     if ids.len() != counts.len() {
         return Err(PyValueError::new_err(
             "counter ids and counts differ in length",
@@ -80,7 +89,43 @@ fn counter_from_input((ids, counts): CounterInput) -> PyResult<Option<CounterDat
     Ok(Some(CounterData::new(entries)))
 }
 
-fn record_from_input(input: PaperInput) -> PyResult<PaperRecord> {
+/// Each counter's text as code points, for the counters Python passed as text.
+type CounterTexts = [Option<Vec<u32>>; 4];
+
+fn counter_texts(input: &PaperInput) -> PyResult<CounterTexts> {
+    let (coauthor, venue, title_chars, abstract_words) = &input.0;
+    let decode = |counter: &CounterInput| match counter {
+        CounterInput::Counts(..) => Ok(None),
+        CounterInput::Text(bytes) => ngrams::code_points(bytes)
+            .map(Some)
+            .ok_or_else(|| PyValueError::new_err("counter text must be UTF-32-LE bytes")),
+    };
+    Ok([
+        decode(coauthor)?,
+        decode(venue)?,
+        decode(title_chars)?,
+        decode(abstract_words)?,
+    ])
+}
+
+/// Builds one counter: from Python's counts, or by counting `text` with `count`.
+fn counter_from_input<'a>(
+    input: CounterInput,
+    text: &'a Option<Vec<u32>>,
+    count: impl FnOnce(&'a [u32]) -> Option<CounterData>,
+) -> PyResult<Option<CounterData>> {
+    match (input, text) {
+        (CounterInput::Counts(ids, counts), _) => counter_from_counts(ids, counts),
+        (CounterInput::Text(_), Some(text)) => Ok(count(text)),
+        (CounterInput::Text(_), None) => unreachable!("counter_texts decodes every text counter"),
+    }
+}
+
+fn record_from_input<'a>(
+    input: PaperInput,
+    texts: &'a CounterTexts,
+    interner: &mut ngrams::GramInterner<'a>,
+) -> PyResult<PaperRecord> {
     let PaperInput(
         (coauthor, venue, title_chars, abstract_words),
         mut author_first_letters,
@@ -116,11 +161,20 @@ fn record_from_input(input: PaperInput) -> PyResult<PaperRecord> {
     }
     title_special_words.sort_unstable();
     title_special_words.dedup();
+    // The n-gram lengths of `preprocess_paper_1`'s `get_text_ngrams` calls.
     Ok(PaperRecord {
-        coauthor_ngrams: counter_from_input(coauthor)?,
-        venue_ngrams: counter_from_input(venue)?,
-        title_char_ngrams: counter_from_input(title_chars)?,
-        abstract_word_ngrams: counter_from_input(abstract_words)?,
+        coauthor_ngrams: counter_from_input(coauthor, &texts[0], |text| {
+            ngrams::char_ngrams(text, &[1, 2, 3, 4], interner)
+        })?,
+        venue_ngrams: counter_from_input(venue, &texts[1], |text| {
+            ngrams::char_ngrams(text, &[2, 3, 4], interner)
+        })?,
+        title_char_ngrams: counter_from_input(title_chars, &texts[2], |text| {
+            ngrams::char_ngrams(text, &[3, 4], interner)
+        })?,
+        abstract_word_ngrams: counter_from_input(abstract_words, &texts[3], |text| {
+            ngrams::word_ngrams(text, interner)
+        })?,
         author_first_letters,
         year,
         title_tokens,
@@ -148,9 +202,16 @@ struct PaperFeaturizer {
 impl PaperFeaturizer {
     #[new]
     fn new(papers: Vec<PaperInput>) -> PyResult<Self> {
+        // Decode every text first: the interner borrows n-grams from them.
+        let texts = papers
+            .iter()
+            .map(counter_texts)
+            .collect::<PyResult<Vec<_>>>()?;
+        let mut interner = ngrams::GramInterner::default();
         let papers = papers
             .into_iter()
-            .map(record_from_input)
+            .zip(&texts)
+            .map(|(paper, texts)| record_from_input(paper, texts, &mut interner))
             .collect::<PyResult<Vec<_>>>()?;
         Ok(Self { papers })
     }

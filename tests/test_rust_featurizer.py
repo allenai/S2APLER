@@ -189,3 +189,70 @@ def test_matches_python_for_every_thread_setting(n_jobs):
     dataset = edge_dataset()
     pairs = list(combinations(sorted(dataset.papers), 2))
     assert_bit_identical(python_features(dataset, pairs), rust_pair_features(dataset.papers, pairs, n_jobs))
+
+
+def unicode_papers():
+    """Raw titles, names and venues whose n-grams need exact Unicode handling."""
+    titles = [
+        "İstanbul İ̇ study",  # lowercases to two code points
+        "Straße ΣΟΣ café café",  # final sigma, combining accent
+        "\U0001f600 emoji \U0001d400 title",  # astral code points
+        "tab\there\nnewline  double  space",
+        "lone \ud800 surrogate",
+        "a",
+        "",
+    ]
+    papers = {}
+    for k, title in enumerate(titles):
+        papers[str(k)] = {
+            "title": title,
+            "abstract": ["", "Word word  WORD\tword", "Über das Über", None][k % 4],
+            "authors": [
+                # A name that normalizes to nothing falls back to its raw text.
+                {"first": ["—", "Ann", "李"][k % 3], "last": ["Lee", "Østby", "–"][k % 3]},
+                {"first": "Bo", "middle": ["Q"], "last": "Kim"},
+            ],
+            "venue": ["J. Études", "Nature  Comm", "", "123"][k % 4],
+            "journal_name": ["Revüe", "", "Nature Comm", None][k % 4],
+            "block": "b",
+        }
+    return PDData(papers=papers, name="unicode", mode="inference")
+
+
+def test_rust_counts_ngrams_from_text_exactly_as_python():
+    dataset = unicode_papers()
+    # Preprocessing leaves the Counters to whoever needs them.
+    assert all(paper.title_ngrams_chars is None for paper in dataset.papers.values())
+    pairs = list(combinations(sorted(dataset.papers), 2)) + [(a, a) for a in dataset.papers]
+    assert_bit_identical(python_features(dataset, pairs), rust_pair_features(dataset.papers, pairs, 2))
+
+
+def test_counters_from_text_match_python_counters():
+    from s2apler.data import with_counters
+    from s2apler.text import get_text_ngrams
+
+    dataset = unicode_papers()
+    paper = with_counters(dataset.papers["1"])
+    assert paper.title_ngrams_chars == get_text_ngrams(
+        "Straße ΣΟΣ café café".lower().replace(" ", ""), stopwords=None, use_bigrams=False
+    )
+    # Only the Counters that are missing get built.
+    kept = Counter({"kept": 1})
+    assert with_counters(paper._replace(venue_ngrams=kept)).venue_ngrams is kept
+
+
+def test_a_counter_some_papers_hold_is_used_for_all():
+    dataset = unicode_papers()
+    first = sorted(dataset.papers)[0]
+    # One paper with a Counter forces every paper to send Counters for that field.
+    dataset.papers[first] = dataset.papers[first]._replace(venue_ngrams=Counter({"zz": 2}))
+    pairs = list(combinations(sorted(dataset.papers), 2))
+    assert_bit_identical(python_features(dataset, pairs), rust_pair_features(dataset.papers, pairs, 1))
+
+
+def test_unpreprocessed_papers_fail_clearly():
+    from s2apler.featurizer import _Interner, rust_paper_record
+
+    paper = next(iter(unicode_papers().papers.values()))._replace(title_ngram_text=None)
+    with pytest.raises(ValueError, match="preprocess"):
+        rust_paper_record(paper, _Interner())
