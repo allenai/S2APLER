@@ -21,8 +21,10 @@ rayon = "1.10"
 # Worker threads that allocate in parallel contend for glibc malloc arenas.
 # Musl wheels keep the system allocator (inherited from s2and's setup).
 # Linux aarch64 wheels keep it too: the manylinux2014 cross GCC cannot build mimalloc.
+# macOS keeps it too: mimalloc there stores its thread heap in a fixed, reserved TLS slot, so
+# a second static copy in the process (s2and's extension) shares the slot and both crash.
 # Keep this cfg equal to the global allocator's cfg in src/lib.rs.
-[target.'cfg(not(any(target_env = "musl", all(target_os = "linux", target_arch = "aarch64"))))'.dependencies]
+[target.'cfg(not(any(target_env = "musl", target_os = "macos", all(target_os = "linux", target_arch = "aarch64"))))'.dependencies]
 mimalloc = { version = "0.1", default-features = false }
 
 [build-dependencies]

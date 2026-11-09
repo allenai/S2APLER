@@ -30,7 +30,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-The s2apler wheels for x86_64 Linux (glibc), macOS and Windows include mimalloc,
+The s2apler wheels for x86_64 Linux (glibc) and Windows include mimalloc,
 through the `mimalloc` and `libmimalloc-sys` Rust crates, as their memory
 allocator. Its upstream project is <https://github.com/microsoft/mimalloc>.
 mimalloc is distributed under the MIT License:
