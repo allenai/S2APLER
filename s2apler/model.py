@@ -431,7 +431,8 @@ class Clusterer:
         datasets: List[PDData]
             the list of datasets to use for validations
         val_dists_precomputed: Dict
-            precomputed distance matrices
+            precomputed distance matrices by dataset name, over each validation block's titled
+            papers sorted by id, as predict reads them; a matrix in another order is misread
         metric_for_hyperopt: string
             the metric to use for hyperparamter optimization
 
