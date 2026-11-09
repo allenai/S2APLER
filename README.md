@@ -6,37 +6,22 @@ The model will be live on semanticscholar.org.
 ## TODO
 - Re-make the dataset once we have production blocks and (possibly) better PDF extractions.
 - Does `predict_incremental` work as we expect? Any differences from S2AND that need code changes?
-- Do we need `altered_cluster_signatures`? Not yet, but we might later. It'll need to be tested properly.
+- Do we need `altered_cluster_papers`? Not yet, but we might later. It'll need to be tested properly.
 - How do we test the constraints that eng will make?
 
 ## Installation
-To install this package, run the following:
+S2APLER needs Python 3.11–3.13 and [`uv`](https://docs.astral.sh/uv/). A source checkout also
+needs Rust ([`rustup`](https://www.rust-lang.org/tools/install)), because it builds the native
+extension that computes pair features:
 
 ```bash
 git clone https://github.com/allenai/S2APLER.git
 cd S2APLER
-conda create -y --name s2apler python==3.8.15
-conda activate s2apler
-pip install -r requirements.in
-pip install -e .
+uv sync --extra dev
 ```
 
-If you run into cryptic errors about GCC on macOS while installing the requirments, try this instead:
-
-```bash
-CFLAGS='-stdlib=libc++' pip install -r requirements.in
-```
-
-Alternatively, you can use `uv`:
-
-```bash
-git clone https://github.com/allenai/S2APLER.git
-cd S2APLER
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv sync
-uv pip install -e .
-```
+See [installation](docs/install.md), [development](docs/development.md) and
+[releasing](docs/release.md) for details.
 
 ## Data
 
@@ -97,7 +82,7 @@ dataset = PDData(
 This will take ~20m - there is a lot of text pre-processing to do.
 
 The first step in the S2APLER pipeline is to specify a featurizer and then train a binary classifier
-that tries to guess whether two signatures are referring to the same person. 
+that tries to guess whether two paper records are the same paper. 
 
 We'll do hyperparameter selection with the validation set and then get the test area under ROC curve.
 
@@ -109,8 +94,7 @@ from s2apler.featurizer import FeaturizationInfo, featurize
 from s2apler.eval import pairwise_eval
 
 featurization_info = FeaturizationInfo()
-# the cache will make it faster to train multiple times - it stores the features on disk for you
-train, val, test = featurize(dataset, featurization_info, n_jobs=8, use_cache=True)
+train, val, test = featurize(dataset, featurization_info, n_jobs=8)
 X_train, y_train = train
 X_val, y_val = val
 X_test, y_test = test
@@ -121,7 +105,14 @@ pairwise_model = PairwiseModeler(n_iter=25, n_jobs=8)
 pairwise_model.fit(X_train, y_train, X_val, y_val)
 
 # this will also dump a lot of useful plots (ROC, PR, SHAP) to the figs_path
-pairwise_metrics = pairwise_eval(X_test, y_test, pairwise_model.classifier, figs_path='figs/', title='example')
+pairwise_metrics = pairwise_eval(
+    X_test,
+    y_test,
+    pairwise_model.classifier,
+    figs_path="figs/",
+    title="example",
+    shap_feature_names=featurization_info.feature_names,
+)
 print(pairwise_metrics)
 ```
 
@@ -133,11 +124,12 @@ There is only one hyperparameter to tune.
 
 ```python
 from s2apler.model import Clusterer, FastCluster
+from s2apler.eval import cluster_eval
 from hyperopt import hp
 
 clusterer = Clusterer(
     featurization_info,
-    pairwise_model,
+    pairwise_model.classifier,
     cluster_model=FastCluster(linkage="average"),
     search_space={"eps": hp.uniform("eps", 0, 1)},
     n_iter=25,
@@ -145,8 +137,8 @@ clusterer = Clusterer(
 )
 clusterer.fit(dataset)
 
-# the metrics_per_signature are there so we can break out the facets if needed
-metrics, metrics_per_signature = cluster_eval(dataset, clusterer)
+# metrics_per_paper has B3 precision, recall and F1 for each paper
+metrics, metrics_per_paper = cluster_eval(dataset, clusterer)
 print(metrics)
 ```
 
@@ -169,14 +161,14 @@ with open("saved_model.pkl", "rb") as _pkl_file:
     clusterer = pickle.load(_pkl_file)
 
 # load some PDData here
-pddata = PDData()  # etc.
-pred_clusters, pred_distance_matrices = clusterer.predict(anddata.get_blocks(), pddata)
+pddata = PDData(papers, name="new_papers", mode="inference")
+pred_clusters, pred_distance_matrices = clusterer.predict(pddata.get_blocks(), pddata)
 ```
 
 Our S2 production models are in the `data` folder.
 
 ### Incremental prediction
-There is a also a `predict_incremental` function on the `Clusterer`, that allows prediction for just a small set of *new* signatures. When instantiating `ANDData`, you can pass in `cluster_seeds`, which will be used instead of model predictions for those signatures. If you call `predict_incremental`, the full distance matrix will not be created, and the new signatures will simply be assigned to the cluster they have the lowest average distance to, as long as it is below the model's `eps`, or separately reclustered with the other unassigned signatures, if not within `eps` of any existing cluster.
+There is a also a `predict_incremental` function on the `Clusterer`, that allows prediction for just a small set of *new* papers. When instantiating `PDData`, you can pass in `cluster_seeds`, which will be used instead of model predictions for those papers. If you call `predict_incremental`, the full distance matrix will not be created, and the new papers will simply be assigned to the cluster they have the lowest average distance to, as long as it is below the model's `eps`, or separately reclustered with the other unassigned papers, if not within `eps` of any existing cluster.
 
 ## Licensing
 The code in this repo is released under the Apache 2.0 license (license included in the repo. The dataset is released under ODC-BY (included in S3 bucket with the data). We would also like to acknowledge that some of the affiliations data comes directly from the Microsoft Academic Graph (https://aka.ms/msracad).

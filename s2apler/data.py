@@ -5,8 +5,6 @@ import re
 import urllib.parse
 import json
 import numpy as np
-import pandas as pd
-import pickle
 import logging
 import multiprocessing
 from tqdm import tqdm
@@ -54,18 +52,13 @@ class Paper(NamedTuple):
     title: str
     abstract: Optional[str]
     has_abstract: Optional[bool]
-    title_ngrams_words: Optional[Counter]
     abstract_ngrams_words: Optional[Counter]
     authors: List[Author]
     venue: Optional[str]
     journal_name: Optional[str]
     title_ngrams_chars: Optional[Counter]
     venue_ngrams: Optional[Counter]
-    journal_ngrams: Optional[Counter]
     author_info_coauthor_n_grams: Optional[Counter]
-    author_info_coauthor_email_prefix_n_grams: Optional[Counter]
-    author_info_coauthor_email_suffix_n_grams: Optional[Counter]
-    author_info_coauthor_affiliations_n_grams: Optional[Counter]
     year: Optional[int]
     sourced_paper_id: str
     corpus_paper_id: Optional[int]  # this is the id of the paper's current mapping in the corpus
@@ -134,24 +127,16 @@ class PDData:
 
     Input:
         papers: path to the papers information json file (or the json object)
-        name: name of the dataset, used for caching computed features
+        name: name of the dataset; Clusterer.fit looks up precomputed distances by it
         mode: 'train' or 'inference'; if 'inference', everything related to splitting will be ignored
         clusters: path to the clusters json file (or the json object)
             - a cluster may span multiple blocks, but we will only consider in-block clusters
             - there will be individual papers that definitely do not belong to any of the known clusters
               but which may or may not cluster with each other.
               papers in these clusters will all appear in clusters.json under the key clusterid_ORPHAN_CLUSTER_KEY
-        specter_embeddings: path to the specter embeddings pickle (or the dictionary object)
         cluster_seeds: path to the cluster seed json file (or the json object)
         altered_cluster_papers: path to the paper ids \n-separated txt file (or a list or set object)
             Clusters that these papers appear in will be marked as "altered"
-        train_pairs: path to predefined train pairs csv (or the dataframe object)
-        val_pairs: path to predefined val pairs csv (or the dataframe object)
-        test_pairs: path to predefined test pairs csv (or the dataframe object)
-        train_papers: path to predefined train papers (or the json object)
-        val_papers: path to predefined val papers (or the json object)
-        test_papers: path to predefined test papers (or the json object)
-        unit_of_data_split: options are ("papers", "blocks", "time")
         num_clusters_for_block_size: probably leave as default,
             controls train/val/test splits based on block size
         train_ratio: training ratio of instances for clustering
@@ -173,16 +158,10 @@ class PDData:
         name: str,
         mode: str = "train",
         clusters: Optional[Union[str, Dict]] = None,
-        specter_embeddings: Optional[Union[str, Dict]] = None,
+        # Keyword-only: removed parameters used to sit here, so old positional calls must fail.
+        *,
         cluster_seeds: Optional[Union[str, Dict]] = None,
         altered_cluster_papers: Optional[Union[str, List, Set]] = None,
-        train_pairs: Optional[Union[str, pd.DataFrame]] = None,
-        val_pairs: Optional[Union[str, pd.DataFrame]] = None,
-        test_pairs: Optional[Union[str, pd.DataFrame]] = None,
-        train_papers: Optional[Union[str, List]] = None,
-        val_papers: Optional[Union[str, List]] = None,
-        test_papers: Optional[Union[str, List]] = None,
-        unit_of_data_split: str = "blocks",
         num_clusters_for_block_size: int = 1,
         train_ratio: float = 0.8,
         val_ratio: float = 0.1,
@@ -206,7 +185,6 @@ class PDData:
                 abstract=paper.get("abstract", None),
                 has_abstract=paper.get("abstract", None) not in {"", None},
                 title_ngrams_chars=None,
-                title_ngrams_words=None,
                 abstract_ngrams_words=None,
                 authors=[
                     Author(
@@ -229,11 +207,7 @@ class PDData:
                 venue=paper.get("venue", None),
                 journal_name=paper.get("journal_name", None),
                 venue_ngrams=None,
-                journal_ngrams=None,
                 author_info_coauthor_n_grams=None,
-                author_info_coauthor_email_prefix_n_grams=None,
-                author_info_coauthor_email_suffix_n_grams=None,
-                author_info_coauthor_affiliations_n_grams=None,
                 year=paper.get("year", None),
                 sourced_paper_id=sourced_paper_id,
                 doi=normalize_doi(paper.get("doi", None)),
@@ -251,9 +225,7 @@ class PDData:
         self.mode = mode
         logger.debug("loading clusters")
         self.clusters: Optional[Dict] = self.maybe_load_json(clusters)
-        logger.debug("loaded clusters, loading specter")
-        self.specter_embeddings = self.maybe_load_specter(specter_embeddings)
-        logger.debug("loaded specter, loading cluster seeds")
+        logger.debug("loaded clusters, loading cluster seeds")
         cluster_seeds_dict = self.maybe_load_json(cluster_seeds)
         self.altered_cluster_papers = self.maybe_load_list(altered_cluster_papers)
         self.cluster_seeds_disallow = set()
@@ -274,13 +246,6 @@ class PDData:
                 cluster_num += 1
             self.max_seed_cluster_id = cluster_num
         logger.debug("loaded cluster seeds")
-        self.train_pairs = self.maybe_load_dataframe(train_pairs)
-        self.val_pairs = self.maybe_load_dataframe(val_pairs)
-        self.test_pairs = self.maybe_load_dataframe(test_pairs)
-        self.train_papers = self.maybe_load_json(train_papers)
-        self.val_papers = self.maybe_load_json(val_papers)
-        self.test_papers = self.maybe_load_json(test_papers)
-        self.unit_of_data_split = unit_of_data_split
         self.num_clusters_for_block_size = num_clusters_for_block_size
         self.train_ratio = train_ratio
         self.val_ratio = val_ratio
@@ -396,49 +361,6 @@ class PDData:
                 return f.read().strip().split("\n")
         else:
             return path_or_list
-
-    @staticmethod
-    def maybe_load_dataframe(path_or_dataframe: Optional[Union[str, pd.DataFrame]]) -> Optional[pd.DataFrame]:
-        """
-        Either loads a dataframe from a csv file or passes through the object
-
-        Parameters
-        ----------
-        path_or_dataframe: string or dataframe
-            the file path or the object
-
-        Returns
-        -------
-        either the loaded dataframe, or the passed in object
-        """
-        if isinstance(path_or_dataframe, str):
-            return pd.read_csv(path_or_dataframe, sep=",")
-        else:
-            return path_or_dataframe
-
-    @staticmethod
-    def maybe_load_specter(path_or_pickle: Optional[Union[str, Dict]]) -> Optional[Dict]:
-        """
-        Either loads a dictionary from a pickle file or passes through the object
-
-        Parameters
-        ----------
-        path_or_pickle: string or dictionary
-            the file path or the object
-
-        Returns
-        -------
-        either the loaded json, or the passed in object
-        """
-        if isinstance(path_or_pickle, str):
-            with open(path_or_pickle, "rb") as _pickle_file:
-                X, keys = pickle.load(_pickle_file)
-            D = {}
-            for i, key in enumerate(keys):
-                D[key] = X[i, :]
-            return D
-        else:
-            return path_or_pickle
 
     def get_constraint(
         self,
@@ -595,8 +517,11 @@ class PDData:
             x.append(block_id)
             y.append(len(papers))
 
+        # scikit-learn 1.4 changed the default to n_init="auto" (one run); keep the old 10 runs
+        # so the same random_seed gives the same block-size groups and splits.
         clustering_model = KMeans(
             n_clusters=self.num_clusters_for_block_size,
+            n_init=10,
             random_state=self.random_seed,
         ).fit(np.array(y).reshape(-1, 1))
         y_group = clustering_model.labels_
@@ -621,131 +546,17 @@ class PDData:
 
         return train_block_dict, val_block_dict, test_block_dict
 
-    def group_paper_helper(self, paper_list: List[str]) -> Dict[str, List[str]]:
-        """
-        Creates a block dict containing a specific input paper list
-
-        Parameters
-        ----------
-        paper_list: List
-            the list of papers to include
-
-        Returns
-        -------
-        Dict: the block dict for the input papers
-        """
-        block_to_papers: Dict[str, List[str]] = {}
-
-        for s in paper_list:
-            if self.paper_to_block[s] not in block_to_papers:
-                block_to_papers[self.paper_to_block[s]] = [s]
-            else:
-                block_to_papers[self.paper_to_block[s]].append(s)
-        return block_to_papers
-
     def split_cluster_papers(
         self,
     ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
         """
-        Splits the block dict into train/val/test blocks based on split type requested.
-        Options for splitting are `papers`, `blocks`, and `time`
+        Splits the blocks into train/val/test blocks, keeping each block whole
 
         Returns
         -------
         train/val/test block dictionaries
         """
-        blocks = self.get_blocks()
-
-        if self.unit_of_data_split == "papers":
-            paper_keys = list(self.papers.keys())
-            train_papers, val_test_papers = train_test_split(
-                paper_keys,
-                test_size=self.val_ratio + self.test_ratio,
-                random_state=self.random_seed,
-            )
-            val_papers, test_papers = train_test_split(
-                val_test_papers,
-                test_size=self.test_ratio / (self.val_ratio + self.test_ratio),
-                random_state=self.random_seed,
-            )
-            train_block_dict = self.group_paper_helper(train_papers)
-            val_block_dict = self.group_paper_helper(val_papers)
-            test_block_dict = self.group_paper_helper(test_papers)
-            return train_block_dict, val_block_dict, test_block_dict
-
-        elif self.unit_of_data_split == "blocks":
-            (
-                train_block_dict,
-                val_block_dict,
-                test_block_dict,
-            ) = self.split_blocks_helper(blocks)
-            return train_block_dict, val_block_dict, test_block_dict
-
-        elif self.unit_of_data_split == "time":
-            paper_to_year = {}
-            for sourced_paper_id, paper in self.papers.items():
-                # sourced_paper_id should be kept as string, so it can be matched to papers.json
-                sourced_paper_id = str(paper.sourced_paper_id)
-                if paper.year is None:
-                    paper_to_year[sourced_paper_id] = 0
-                else:
-                    paper_to_year[sourced_paper_id] = paper.year
-
-            train_size = int(len(paper_to_year) * self.train_ratio)
-            val_size = int(len(paper_to_year) * self.val_ratio)
-            papers_sorted_by_year = [i[0] for i in (sorted(paper_to_year.items(), key=lambda x: x[1]))]
-
-            train_papers = papers_sorted_by_year[0:train_size]
-            val_papers = papers_sorted_by_year[train_size : train_size + val_size]
-            test_papers = papers_sorted_by_year[train_size + val_size : len(papers_sorted_by_year)]
-
-            train_block_dict = self.group_paper_helper(train_papers)
-            val_block_dict = self.group_paper_helper(val_papers)
-            test_block_dict = self.group_paper_helper(test_papers)
-            return train_block_dict, val_block_dict, test_block_dict
-
-        else:
-            raise Exception(f"Unknown unit_of_data_split: {self.unit_of_data_split}")
-
-    def split_data_papers_fixed(
-        self,
-    ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
-        """
-        Splits the block dict into train/val/test blocks based on a fixed paper
-        based split
-
-        Returns
-        -------
-        train/val/test block dictionaries
-        """
-        train_block_dict: Dict[str, List[str]] = {}
-        val_block_dict: Dict[str, List[str]] = {}
-        test_block_dict: Dict[str, List[str]] = {}
-
-        test_papers = self.test_papers
-        logger.debug("fixed papers split")
-
-        if self.val_papers is None:
-            train_papers = []
-            val_papers = []
-            train_prob = self.train_ratio / (self.train_ratio + self.val_ratio)
-            np.random.seed(self.random_seed)
-            split_prob = np.random.rand(len(self.train_papers))
-            for paper, p in zip(self.train_papers, split_prob):
-                if p < train_prob:
-                    train_papers.append(paper)
-                else:
-                    val_papers.append(paper)
-            logger.debug(f"size of papers {len(train_papers), len(val_papers)}")
-        else:
-            train_papers = self.train_papers
-            val_papers = self.val_papers
-
-        train_block_dict = self.group_paper_helper(train_papers)
-        val_block_dict = self.group_paper_helper(val_papers)
-        test_block_dict = self.group_paper_helper(test_papers)
-
-        return train_block_dict, val_block_dict, test_block_dict
+        return self.split_blocks_helper(self.get_blocks())
 
     def split_pairs(
         self,
@@ -828,44 +639,6 @@ class PDData:
                 cluster_to_papers[true_cluster_id].append(paper)
 
         return dict(cluster_to_papers)
-
-    def fixed_pairs(
-        self,
-    ) -> Tuple[
-        List[Tuple[str, str, Union[int, float]]],
-        List[Tuple[str, str, Union[int, float]]],
-        List[Tuple[str, str, Union[int, float]]],
-    ]:
-        """
-        creates pairs for the pairwise classification task from a fixed train/val/test split
-
-        Returns
-        -------
-        train/val/test pairs, where each pair is (paper_id_1, paper_id_2, label)
-        """
-        assert (
-            self.train_pairs is not None and self.test_pairs is not None
-        ), "You need to pass in train and test pairs to use this function"
-        self.train_pairs.loc[:, "label"] = self.train_pairs["label"].map(
-            {"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1}
-        )
-        if self.val_pairs is not None:
-            self.val_pairs.loc[:, "label"] = self.val_pairs["label"].map(
-                {"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1}
-            )
-            train_pairs = list(self.train_pairs.to_records(index=False))
-            val_pairs = list(self.val_pairs.to_records(index=False))
-        else:
-            np.random.seed(self.random_seed)
-            # split train into train/val
-            train_prob = self.train_ratio / (self.train_ratio + self.val_ratio)
-            msk = np.random.rand(len(self.train_pairs)) < train_prob
-            train_pairs = list(self.train_pairs[msk].to_records(index=False))
-            val_pairs = list(self.train_pairs[~msk].to_records(index=False))
-        self.test_pairs.loc[:, "label"] = self.test_pairs["label"].map({"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1})
-        test_pairs = list(self.test_pairs.to_records(index=False))
-
-        return train_pairs, val_pairs, test_pairs
 
     def all_pairs(self) -> List[Tuple[str, str, Union[int, float]]]:
         """

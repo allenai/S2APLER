@@ -16,7 +16,11 @@ model_variants:
     # One or more bash commands to execute as part of a RUN step in a Dockerfile.
     # Leave this unset unless your model has special system requirements beyond
     # those in your setup.py.
-    docker_run_commands: []
+    # Installing s2apler from source compiles its Rust extension, so the image needs a C
+    # toolchain and Rust on PATH. Not needed when installing a published s2apler wheel.
+    docker_run_commands:
+      - apt-get update && apt-get install -y --no-install-recommends build-essential curl && rm -rf /var/lib/apt/lists/*
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && ln -sf "$HOME/.cargo/bin/cargo" "$HOME/.cargo/bin/rustc" /usr/local/bin/
 
     # Any additional sets of dependencies required by the model.
     # These are the 'extras_require' keys in your setup.py.
@@ -57,7 +61,11 @@ model_variants:
     # One or more bash commands to execute as part of a RUN step in a Dockerfile.
     # Leave this unset unless your model has special system requirements beyond
     # those in your setup.py.
-    docker_run_commands: []
+    # Installing s2apler from source compiles its Rust extension, so the image needs a C
+    # toolchain and Rust on PATH. Not needed when installing a published s2apler wheel.
+    docker_run_commands:
+      - apt-get update && apt-get install -y --no-install-recommends build-essential curl && rm -rf /var/lib/apt/lists/*
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && ln -sf "$HOME/.cargo/bin/cargo" "$HOME/.cargo/bin/rustc" /usr/local/bin/
 
     # Any additional sets of dependencies required by the model.
     # These are the 'extras_require' keys in your setup.py.

@@ -65,3 +65,19 @@ class TestClusterer(unittest.TestCase):
         )
         # doesn't matter where the orphan goes, we ignore it during B3 construction
         self.assertAlmostEqual(size_v_quantity_4, size_v_quantity_3)
+
+
+def test_pairwise_eval_with_shap(tmp_path):
+    # shap 0.51 returns one (n, f) array for binary LightGBM models; 0.41 returned one per class.
+    import lightgbm as lgb
+    import numpy as np
+
+    from s2apler.eval import pairwise_eval
+
+    rng = np.random.default_rng(0)
+    X = rng.random((300, 4))
+    y = (X[:, 0] + X[:, 1] > 1).astype(int)
+    classifier = lgb.LGBMClassifier(n_estimators=20, random_state=0, verbose=-1).fit(X, y)
+    metrics = pairwise_eval(X, y, classifier, str(tmp_path), "t", ["a", "b", "c", "d"], shap_plot_type="bar")
+    assert 0.5 < metrics["AUROC"] <= 1
+    assert (tmp_path / "t_shap.png").exists()

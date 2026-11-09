@@ -1,0 +1,8 @@
+.venv/
+s2apler_rust/target/
+**/__pycache__/
+s2apler/_s2apler_rust*
+# Training data and experiments are not build inputs; the image needs only the path config.
+data/*
+!data/path_config.json
+scratch/

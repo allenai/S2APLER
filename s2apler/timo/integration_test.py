@@ -26,7 +26,6 @@ def test_prediction(self, container):
 ```
 """
 
-
 import logging
 import sys
 import unittest

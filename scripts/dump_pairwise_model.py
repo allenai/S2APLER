@@ -3,6 +3,7 @@ This scripts trains a S2APLER model and then dumps it to disk.
 
 If you want to figure out what EPS to use, that is done in analyze_final_data.ipynb
 """
+
 import os
 
 N_JOBS = 16
@@ -46,14 +47,12 @@ dataset = PDData(
 )
 
 # make features
-# the cache will make it faster to train multiple times - it stores the features on disk for you
-# off for now
 featurization_info = FeaturizationInfo(features_to_use=features_to_use)
 feature_names = featurization_info.get_feature_names()
-train, val, test = featurize(dataset, featurization_info, n_jobs=N_JOBS, use_cache=False)
-X_train, y_train, _ = train
-X_val, y_val, _ = val
-X_test, y_test, _ = test
+train, val, test = featurize(dataset, featurization_info, n_jobs=N_JOBS)
+X_train, y_train = train
+X_val, y_val = val
+X_test, y_test = test
 
 
 # train pairwise model on train+val and eval on test.

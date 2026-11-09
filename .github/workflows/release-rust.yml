@@ -1,0 +1,357 @@
+name: release artifacts (build, test, publish)
+
+on:
+  # A merge to main that changes VERSION releases it; the pypi environment's reviewers still
+  # approve the upload. A manual run builds any branch and publishes only from main.
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: validate exact commit
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The push's previous commit holds the VERSION to compare with.
+          fetch-depth: 0
+
+      # PyPI adds new files to an existing release, so reusing a version would mix two builds.
+      # A push that keeps VERSION, or whose version PyPI already has, releases nothing.
+      # A manual run fails on a published version. The beta upload in docs/release.md repeats this check.
+      - name: Decide whether to release
+        id: decide
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          status="$(curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/s2apler/${version}/json")"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            before=""
+            if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+              before="$(git show "${BEFORE_SHA}:VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
+            fi
+            if [ "$before" = "$version" ]; then
+              echo "::notice::VERSION is still ${version}; nothing to release"
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ "$status" = "200" ]; then
+              echo "::notice::PyPI already has s2apler ${version}; nothing to release"
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          if [ "$status" != "404" ]; then
+            echo "::error::PyPI returned HTTP ${status} for s2apler ${version}; set a new VERSION first"
+            exit 1
+          fi
+          echo "Releasing s2apler ${version}"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+      # A pre-release (for example 1.0.0b1) builds and smoke-tests on any branch.
+      # Only main publishes; docs/release.md describes the manual beta upload.
+      - name: Require main for final releases
+        if: steps.decide.outputs.release == 'true'
+        run: |
+          if grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)[0-9]+$' VERSION; then exit 0; fi
+          test "$GITHUB_REF" = "refs/heads/main"
+
+      - name: Setup uv
+        if: steps.decide.outputs.release == 'true'
+        uses: astral-sh/setup-uv@v7
+
+      - uses: actions/setup-python@v6
+        if: steps.decide.outputs.release == 'true'
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        if: steps.decide.outputs.release == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # The script checks versions, runs Ruff, ty, and the Rust checks, syncs the locked environment, and runs pytest.
+      - name: Run the full CI policy
+        if: steps.decide.outputs.release == 'true'
+        run: uv run --no-project python scripts/run_ci_locally.py
+
+  source-distributions:
+    name: source distributions
+    runs-on: ubuntu-latest
+    needs: [validate]
+    if: needs.validate.outputs.release == 'true'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build s2apler distributions
+        run: uv build --sdist --out-dir dist --clear
+
+      - name: Verify Rust distribution license notices
+        run: uv run --no-project python scripts/verification/verify_rust_distribution_licenses.py --dist-dir dist
+
+      # Building from sdist compiles the extension, which is a distinct path from
+      # installing a wheel. Exercise it on every supported interpreter.
+      - name: Install and exercise s2apler sdist
+        shell: bash
+        run: |
+          sdist="$(find dist -type f -name '*.tar.gz' -print -quit)"
+          test -n "$sdist"
+          for py in 3.11 3.12 3.13; do
+            echo "::group::s2apler sdist smoke (py${py})"
+            smoke_venv="$RUNNER_TEMP/s2apler-sdist-smoke-${py}"
+            uv venv --python "$py" "$smoke_venv"
+            uv pip install --python "$smoke_venv/bin/python" "$sdist"
+            uv run --no-project --python "$smoke_venv/bin/python" python \
+              scripts/verification/smoke_installed_rust_api.py
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist-s2apler-source
+          path: dist/*
+
+  wheels-windows:
+    name: wheels (windows, py${{ matrix.py }})
+    runs-on: windows-latest
+    needs: [validate]
+    if: needs.validate.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        py: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        with:
+          maturin-version: v1.14.1
+          command: build
+          args: --release --locked --compatibility pypi --out dist
+
+      - name: Verify Rust distribution license notices
+        run: uv run --no-project python scripts/verification/verify_rust_distribution_licenses.py --dist-dir dist
+
+      - name: Install and exercise Windows wheel
+        shell: pwsh
+        run: |
+          $smokeVenv = Join-Path $env:RUNNER_TEMP "s2apler-wheel-smoke"
+          $wheel = (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName
+          uv venv --python "${{ matrix.py }}" $smokeVenv
+          $python = Join-Path $smokeVenv "Scripts/python.exe"
+          uv pip install --python $python $wheel
+          uv run --no-project --python $python python scripts/verification/smoke_installed_rust_api.py
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist-s2apler-windows-py${{ matrix.py }}
+          path: dist/*
+
+  wheels-macos:
+    name: wheels (macos universal2, py${{ matrix.py }})
+    runs-on: macos-latest
+    needs: [validate]
+    if: needs.validate.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        py: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install Rust targets (universal2)
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
+      - name: Build wheels (universal2)
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        env:
+          ARCHFLAGS: "-arch x86_64 -arch arm64"
+        with:
+          maturin-version: v1.14.1
+          command: build
+          args: --release --locked --compatibility pypi --out dist
+
+      - name: Verify Rust distribution license notices
+        run: uv run --no-project python scripts/verification/verify_rust_distribution_licenses.py --dist-dir dist
+
+      - name: Install and exercise macOS wheel
+        shell: bash
+        run: |
+          smoke_venv="$RUNNER_TEMP/s2apler-wheel-smoke"
+          wheel="$(find dist -type f -name '*.whl' -print -quit)"
+          test -n "$wheel"
+          uv venv --python "${{ matrix.py }}" "$smoke_venv"
+          uv pip install --python "$smoke_venv/bin/python" "$wheel"
+          uv run --no-project --python "$smoke_venv/bin/python" python \
+            scripts/verification/smoke_installed_rust_api.py
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist-s2apler-macos-universal2-py${{ matrix.py }}
+          path: dist/*
+
+  wheels-linux:
+    name: wheels (linux ${{ matrix.platform.name }})
+    runs-on: ubuntu-latest
+    needs: [validate]
+    if: needs.validate.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: manylinux2014-x86_64
+            target: x86_64-unknown-linux-gnu
+            manylinux: "2_17"
+            docker-platform: linux/amd64
+            python-image: slim
+          - name: manylinux2014-aarch64
+            target: aarch64-unknown-linux-gnu
+            manylinux: "2_17"
+            docker-platform: linux/arm64
+            python-image: slim
+          - name: musllinux-x86_64
+            target: x86_64-unknown-linux-musl
+            manylinux: "musllinux_1_2"
+            docker-platform: linux/amd64
+            python-image: alpine
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build wheels (manylinux/musllinux)
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        with:
+          maturin-version: v1.14.1
+          command: build
+          target: ${{ matrix.platform.target }}
+          manylinux: ${{ matrix.platform.manylinux }}
+          args: >
+            --release --locked --compatibility pypi --out dist
+            -i python3.11 -i python3.12 -i python3.13
+
+      - name: Verify Rust distribution license notices
+        run: uv run --no-project python scripts/verification/verify_rust_distribution_licenses.py --dist-dir dist
+
+      - name: Set up QEMU for the arm64 wheel import
+        if: matrix.platform.docker-platform == 'linux/arm64'
+        uses: docker/setup-qemu-action@v3
+
+      # The x86_64 runner cannot load aarch64 or musl wheels, so import each one in a matching container.
+      # Dependencies are skipped because the import check needs only the native module.
+      - name: Import each wheel on its target platform
+        shell: bash
+        run: |
+          for py in 3.11 3.12 3.13; do
+            wheel="$(find dist -type f -name "*-cp${py/./}-*.whl" -print -quit)"
+            test -n "$wheel"
+            echo "::group::${wheel} (python:${py}-${{ matrix.platform.python-image }})"
+            docker run --rm --platform '${{ matrix.platform.docker-platform }}' \
+              -v "$GITHUB_WORKSPACE:/work:ro" -w /tmp \
+              "python:${py}-${{ matrix.platform.python-image }}" \
+              sh -c "pip install --quiet --no-deps --root-user-action=ignore '/work/${wheel}' \
+                && python /work/scripts/verification/smoke_installed_rust_api.py"
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist-s2apler-linux-${{ matrix.platform.name }}
+          path: dist/*
+
+  release-smoke:
+    name: clean installed-artifact smoke (py${{ matrix.py }})
+    needs: [source-distributions, wheels-windows, wheels-macos, wheels-linux]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        py: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Download s2apler distributions
+        uses: actions/download-artifact@v7
+        with:
+          pattern: dist-s2apler-*
+          merge-multiple: true
+          path: release/s2apler
+
+      - name: Clean-install release artifacts
+        run: |
+          SMOKE_VENV="$RUNNER_TEMP/s2apler-release-smoke"
+          PY_TAG="cp$(echo '${{ matrix.py }}' | tr -d .)"
+          WHEEL="$(find release/s2apler -type f -name "*${PY_TAG}*manylinux*x86_64.whl" -print -quit)"
+          test -n "$WHEEL"
+          uv venv --python '${{ matrix.py }}' "$SMOKE_VENV"
+          uv pip install --python "$SMOKE_VENV/bin/python" "$WHEEL"
+
+      - name: Exercise installed pair featurization
+        run: |
+          SMOKE_VENV="$RUNNER_TEMP/s2apler-release-smoke"
+          cd "$RUNNER_TEMP"
+          uv run --no-project --python "$SMOKE_VENV/bin/python" python \
+            "$GITHUB_WORKSPACE/scripts/verification/smoke_installed_featurizer.py"
+
+      # All matrix legs download identical artifacts; publish the tested set once
+      # so the artifact name stays unique. `needs: [release-smoke]` still waits
+      # for every leg, so publication requires all three versions to pass.
+      - uses: actions/upload-artifact@v6
+        if: matrix.py == '3.11'
+        with:
+          name: release-distributions
+          path: release
+
+  publish-s2apler:
+    name: publish s2apler to PyPI
+    needs: [release-smoke]
+    if: success() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download tested release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: release-distributions
+          path: release
+      - name: Publish s2apler
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: release/s2apler

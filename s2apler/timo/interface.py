@@ -132,7 +132,9 @@ class Predictor:
         self.clusterer.use_default_constraints_as_supervision = self._config.use_default_constraints_as_supervision
         self.clusterer.dont_merge_cluster_seeds = self._config.dont_merge_cluster_seeds
         self.clusterer.n_jobs = self._config.n_jobs
-        self.clusterer.classifier.n_job = self._config.n_jobs
+        # The Clusterer scores with s2and's native booster, using n_jobs threads. Converting the
+        # model takes a moment, so do it now rather than on the first request.
+        self.clusterer._scorer(self.clusterer.classifier)
 
     def predict_one(self, instance: Instance) -> Prediction:
         """

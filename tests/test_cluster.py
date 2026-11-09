@@ -33,7 +33,6 @@ class TestClusterer(unittest.TestCase):
                 X_random, y_random
             ),
             n_jobs=1,
-            use_cache=False,
             use_default_constraints_as_supervision=False,
         )
 
@@ -76,7 +75,6 @@ class TestClustererFit(unittest.TestCase):
                 np.random.random((10, 8)), np.random.randint(0, 2, 10)
             ),
             n_jobs=1,
-            use_cache=False,
             n_iter=3,
         )
         return dataset, clusterer
@@ -101,3 +99,13 @@ class TestClustererFit(unittest.TestCase):
         block = {"reviewerlistfor": ["84177344", "49188235", "214237506"]}
         with pytest.raises(ValueError, match="has shape"):
             clusterer.predict(block, dataset, dists={"reviewerlistfor": np.ones(6, dtype=np.float16)})
+
+
+def test_constructors_reject_arguments_past_removed_parameters():
+    import pytest
+
+    # Positions after removed parameters are keyword-only, so old positional calls can't shift.
+    with pytest.raises(TypeError):
+        Clusterer(FeaturizationInfo(), None, None, None, None, 25, 16, False)  # ty: ignore[too-many-positional-arguments]
+    with pytest.raises(TypeError):
+        PDData({}, "x", "inference", None, None, {})  # ty: ignore[too-many-positional-arguments]

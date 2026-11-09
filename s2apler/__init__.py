@@ -1,4 +1,7 @@
 import logging
+from importlib.metadata import version as package_version
+
+__version__ = package_version("s2apler")
 
 logger = logging.getLogger("s2apler")
 logger.setLevel(logging.INFO)
