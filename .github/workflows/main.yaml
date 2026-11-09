@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # Every pull request, including ones stacked on feature branches, and manual runs.
   pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +40,8 @@ jobs:
         include:
           - os: windows-latest
             py: "3.11"
+          - os: macos-latest
+            py: "3.11"
     steps:
       - uses: actions/checkout@v5
 
@@ -50,6 +53,11 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.py }}
+
+      # LightGBM's macOS wheels load the OpenMP runtime from Homebrew; the tests train models.
+      - name: Install OpenMP (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libomp
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
