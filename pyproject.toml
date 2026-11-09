@@ -49,6 +49,8 @@ dev = [
     "pytest==9.1.1",
     "pytest-cov>=7.1,<8",
     "pytest-xdist>=3.8,<4",
+    # The release workflow test reads the workflow YAML.
+    "pyyaml>=6.0.3,<7",
     # TIMO's interface models
     "pydantic==1.10.2",
     # Type checking
