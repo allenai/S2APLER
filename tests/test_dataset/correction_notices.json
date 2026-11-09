@@ -1647,5 +1647,849 @@
    "source": "Nature",
    "block": "block"
   }
+ },
+ "mast_cells": {
+  "1431315993": {
+   "sourced_paper_id": "1431315993",
+   "source": "ScienceParseMerged",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "WJ",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "EM",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "JM",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "Introduction: Mast cells have been implicated to play a functional role in arthritis, especially in autoantibodypositive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients. Methods: Synovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA. Results: The number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPARA and OA patients. Conclusions: The synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis. Introduction Rheumatoid arthritis (RA) is an autoimmune disease characterized by chronic inflammation of the synovial lining of the joint. In the majority of patients with established RA, anticitrullinated protein antibodies (ACPAs) can be found [1]. It is currently believed that ACPA+ and ACPA-RA are two different disease entities, each with its own pathogenesis [2]. Several cell types of the immune system play a role in the pathogenesis of RA. The presence of autoantibodies and the linkage of RA to human leukocyte antigen shared epitope alleles in ACPA+ RA indicate that the adaptive immune system plays a prominent role. However, cells of the innate immune system, such as mast cells, have also been implicated in pathogenesis of RA [3]. Indeed, the number of mast cells in synovial tissue is associated with inflammatory mediators such as histamine in synovial fluid [4]. Among the cytokines that are thought to be involved in RA, IL-17 has recently attracted considerable attention. IL-17 can induce production of other proinflammatory factors such as IL-6, IL-1, TNF and matrix metalloproteinases, leading to inflammation, breakdown of cartilage and bone erosion [5]. IL-17 deficient mice are less prone to develop experimental arthritis and blocking IL-17 can reduce both the onset and progression in these models [6]. In RA, high levels of IL-17 were found in synovial fluid, especially compared to OA patients [7]. The first proof-ofconcept trial indicates that neutralization of IL-17 is a potential new target for the treatment of RA [8]. * Correspondence: j.suurmond@lumc.nl Department of Rheumatology, Leiden University Medical Center, PO Box 9600, Albinusdreef 2, C1-R, NL-2300 RC Leiden, The Netherlands Full list of author information is available at the end of the article Suurmond et al. Arthritis Research & Therapy 2011, 13:R150 http://arthritis-research.com/content/13/5/R150 © 2011 Suurmond et al.; licensee BioMed Central Ltd. This is an open access article distributed under the terms of the Creative Commons Attribution License http://creativecommons.org/licenses/by/2.0, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited. On the basis of the data described above, it is postulated that Th17 cells, through the production of IL-17 and other Th17-associated cytokines, play a prominent role in the inflamed synovium by perpetuating the inflammatory milieu observed in arthritis [6]. Interestingly, a recent study by Hueber et al. [9] indicated that the mast cell is the most abundant cell type expressing IL-17 in the synovial tissue of 10 RA patients. However, other studies have shown the presence of IL-17-producing T cells in RA patients [10]. Because previous investigators have reported that ACPA+ and ACPARA are distinct disease entities [2], our aim in the present study was to analyze which cell subsets express IL-17 in the synovial tissue of ACPA+ RA, ACPA-RA and OA patients. Materials and methods",
+   "source_id": "799b2f6c931eb9f04547a7d9a8cc4f430c4321ff",
+   "doi": null,
+   "pmid": null,
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and-negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": "799b2f6c931eb9f04547a7d9a8cc4f430c4321ff",
+   "year": 2011
+  },
+  "1443012510033645568": {
+   "sourced_paper_id": "1443012510033645568",
+   "source": "MAG",
+   "venue": null,
+   "journal_name": "",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": "L.",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "M.",
+     "author_info_middle": "R.",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F.",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "T.W.J.",
+     "author_info_middle": null,
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "R",
+     "author_info_middle": "E",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.J.M.",
+     "author_info_middle": null,
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": null,
+   "source_id": "3087176078",
+   "doi": null,
+   "pmid": null,
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium (Retraction of vol 12, R150, 2011)",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2015
+  },
+  "1444693022": {
+   "sourced_paper_id": "1444693022",
+   "source": "ScienceParseMerged",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "WJ",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "EM",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "JM",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "Introduction: Mast cells have been implicated to play a functional role in arthritis, especially in autoantibodypositive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients. Methods: Synovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA. Results: The number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPARA and OA patients. Conclusions: The synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis. Introduction Rheumatoid arthritis (RA) is an autoimmune disease characterized by chronic inflammation of the synovial lining of the joint. In the majority of patients with established RA, anticitrullinated protein antibodies (ACPAs) can be found [1]. It is currently believed that ACPA+ and ACPA-RA are two different disease entities, each with its own pathogenesis [2]. Several cell types of the immune system play a role in the pathogenesis of RA. The presence of autoantibodies and the linkage of RA to human leukocyte antigen shared epitope alleles in ACPA+ RA indicate that the adaptive immune system plays a prominent role. However, cells of the innate immune system, such as mast cells, have also been implicated in pathogenesis of RA [3]. Indeed, the number of mast cells in synovial tissue is associated with inflammatory mediators such as histamine in synovial fluid [4]. Among the cytokines that are thought to be involved in RA, IL-17 has recently attracted considerable attention. IL-17 can induce production of other proinflammatory factors such as IL-6, IL-1, TNF and matrix metalloproteinases, leading to inflammation, breakdown of cartilage and bone erosion [5]. IL-17 deficient mice are less prone to develop experimental arthritis and blocking IL-17 can reduce both the onset and progression in these models [6]. In RA, high levels of IL-17 were found in synovial fluid, especially compared to OA patients [7]. The first proof-ofconcept trial indicates that neutralization of IL-17 is a potential new target for the treatment of RA [8]. * Correspondence: j.suurmond@lumc.nl Department of Rheumatology, Leiden University Medical Center, PO Box 9600, Albinusdreef 2, C1-R, NL-2300 RC Leiden, The Netherlands Full list of author information is available at the end of the article Suurmond et al. Arthritis Research & Therapy 2011, 13:R150 http://arthritis-research.com/content/13/5/R150 © 2011 Suurmond et al.; licensee BioMed Central Ltd. This is an open access article distributed under the terms of the Creative Commons Attribution License http://creativecommons.org/licenses/by/2.0, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited. On the basis of the data described above, it is postulated that Th17 cells, through the production of IL-17 and other Th17-associated cytokines, play a prominent role in the inflamed synovium by perpetuating the inflammatory milieu observed in arthritis [6]. Interestingly, a recent study by Hueber et al. [9] indicated that the mast cell is the most abundant cell type expressing IL-17 in the synovial tissue of 10 RA patients. However, other studies have shown the presence of IL-17-producing T cells in RA patients [10]. Because previous investigators have reported that ACPA+ and ACPARA are distinct disease entities [2], our aim in the present study was to analyze which cell subsets express IL-17 in the synovial tissue of ACPA+ RA, ACPA-RA and OA patients. Materials and methods",
+   "source_id": "d3e7b7e51f4575846419f5274d85411df22e0091",
+   "doi": null,
+   "pmid": null,
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and-negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": "d3e7b7e51f4575846419f5274d85411df22e0091",
+   "year": 2011
+  },
+  "1459784667": {
+   "sourced_paper_id": "1459784667",
+   "source": "ScienceParseMerged",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "WJ",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "EM",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "JM",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "Introduction: Mast cells have been implicated to play a functional role in arthritis, especially in autoantibodypositive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients. Methods: Synovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA. Results: The number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPARA and OA patients. Conclusions: The synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis. Introduction Rheumatoid arthritis (RA) is an autoimmune disease characterized by chronic inflammation of the synovial lining of the joint. In the majority of patients with established RA, anticitrullinated protein antibodies (ACPAs) can be found [1]. It is currently believed that ACPA+ and ACPA-RA are two different disease entities, each with its own pathogenesis [2]. Several cell types of the immune system play a role in the pathogenesis of RA. The presence of autoantibodies and the linkage of RA to human leukocyte antigen shared epitope alleles in ACPA+ RA indicate that the adaptive immune system plays a prominent role. However, cells of the innate immune system, such as mast cells, have also been implicated in pathogenesis of RA [3]. Indeed, the number of mast cells in synovial tissue is associated with inflammatory mediators such as histamine in synovial fluid [4]. Among the cytokines that are thought to be involved in RA, IL-17 has recently attracted considerable attention. IL-17 can induce production of other proinflammatory factors such as IL-6, IL-1, TNF and matrix metalloproteinases, leading to inflammation, breakdown of cartilage and bone erosion [5]. IL-17 deficient mice are less prone to develop experimental arthritis and blocking IL-17 can reduce both the onset and progression in these models [6]. In RA, high levels of IL-17 were found in synovial fluid, especially compared to OA patients [7]. The first proof-ofconcept trial indicates that neutralization of IL-17 is a potential new target for the treatment of RA [8]. * Correspondence: j.suurmond@lumc.nl Department of Rheumatology, Leiden University Medical Center, PO Box 9600, Albinusdreef 2, C1-R, NL-2300 RC Leiden, The Netherlands Full list of author information is available at the end of the article Suurmond et al. Arthritis Research & Therapy 2011, 13:R150 http://arthritis-research.com/content/13/5/R150 © 2011 Suurmond et al.; licensee BioMed Central Ltd. This is an open access article distributed under the terms of the Creative Commons Attribution License http://creativecommons.org/licenses/by/2.0, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited. RE TR AC TE D RT IC LE On the basis of the data described above, it is postulated that Th17 cells, through the production of IL-17 and other Th17-associated cytokines, play a prominent role in the inflamed synovium by perpetuating the inflammatory milieu observed in arthritis [6]. Interestingly, a recent study by Hueber et al. [9] indicated that the mast cell is the most abundant cell type expressing IL-17 in the synovial tissue of 10 RA patients. However, other studies have shown the presence of IL-17-producing T cells in RA patients [10]. Because previous investigators have reported that ACPA+ and ACPARA are distinct disease entities [2], our aim in the present study was to analyze which cell subsets express IL-17 in the synovial tissue of ACPA+ RA, ACPA-RA and OA patients. Materials and methods",
+   "source_id": "b81f85b545b9cd3689cfb6478465a3c44aa882f0",
+   "doi": null,
+   "pmid": null,
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and-negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": "b81f85b545b9cd3689cfb6478465a3c44aa882f0",
+   "year": 2011
+  },
+  "1524897677": {
+   "sourced_paper_id": "1524897677",
+   "source": "MAG",
+   "venue": null,
+   "journal_name": "Arthritis Research & Therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L.",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R.",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F.",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "W.",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "E.",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "J.",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "Mast cells have been implicated to play a functional role in arthritis, especially in autoantibody-positive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients. Synovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA. The number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPA- RA and OA patients. The synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis.",
+   "source_id": "2132079355",
+   "doi": "10.1186/ar3466",
+   "pmid": null,
+   "title": "Retraction Note: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2011
+  },
+  "1824594924": {
+   "sourced_paper_id": "1824594924",
+   "source": "SpringerNature",
+   "venue": null,
+   "journal_name": "Arthritis Research & Therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "WJ",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "EM",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "JM",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "IntroductionMast cells have been implicated to play a functional role in arthritis, especially in autoantibody-positive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients.MethodsSynovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA.ResultsThe number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPA- RA and OA patients.ConclusionsThe synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis.",
+   "source_id": "doi:10.1186/ar3466",
+   "doi": "10.1186/ar3466",
+   "pmid": null,
+   "title": "RETRACTED ARTICLE: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium\n",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2011
+  },
+  "1824706971": {
+   "sourced_paper_id": "1824706971",
+   "source": "SpringerNature",
+   "venue": null,
+   "journal_name": "Arthritis Research & Therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L.",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R.",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F.",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "W.",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "E.",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "J.",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": null,
+   "source_id": "doi:10.1186/s13075-015-0847-3",
+   "doi": "10.1186/s13075-015-0847-3",
+   "pmid": null,
+   "title": "Retraction Note: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2015
+  },
+  "1996170033": {
+   "sourced_paper_id": "1996170033",
+   "source": "Springer",
+   "venue": "Arthritis Research & Therapy",
+   "journal_name": "Arthritis Research & Therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L.",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R.",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F.",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "W.",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "E.",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "J.",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": null,
+   "source_id": "10.1186/s13075-015-0847-3",
+   "doi": "10.1186/s13075-015-0847-3",
+   "pmid": null,
+   "title": "Retraction Note: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": "7b7ecd2a727fee91d6c44b0cb9831babe543cf3c",
+   "year": 2015
+  },
+  "2038844007": {
+   "sourced_paper_id": "2038844007",
+   "source": "Unpaywall",
+   "venue": "Arthritis Research & Therapy",
+   "journal_name": "Arthritis Research & Therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie L",
+     "author_info_middle": null,
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte R",
+     "author_info_middle": null,
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward F",
+     "author_info_middle": null,
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom WJ",
+     "author_info_middle": null,
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René EM",
+     "author_info_middle": null,
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie JM",
+     "author_info_middle": null,
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": null,
+   "source_id": "10.1186/ar3466",
+   "doi": "10.1186/ar3466",
+   "pmid": null,
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2011
+  },
+  "2039593257": {
+   "sourced_paper_id": "2039593257",
+   "source": "Unpaywall",
+   "venue": "Arthritis Research & Therapy",
+   "journal_name": "Arthritis Research & Therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie L.",
+     "author_info_middle": null,
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte R.",
+     "author_info_middle": null,
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward F.",
+     "author_info_middle": null,
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom W. J.",
+     "author_info_middle": null,
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René E. M.",
+     "author_info_middle": null,
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie J. M.",
+     "author_info_middle": null,
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": null,
+   "source_id": "10.1186/s13075-015-0847-3",
+   "doi": "10.1186/s13075-015-0847-3",
+   "pmid": null,
+   "title": "Retraction Note: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2015
+  },
+  "207480456": {
+   "sourced_paper_id": "207480456",
+   "source": "Grobid",
+   "venue": "Arthritis Res Ther. Arthritis Research & Therapy",
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "W",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "E",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "J",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "Retraction Note: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and-negative rheumatoid arthritis and osteoarthritis synovium 1 Retraction The authors retract this article [1] following an investigation by Leiden University Medical Centre into the research activities of the last author. The investigation identified a discrepancy between the data reported in the article and the original collected data. The investigation committee concluded that this undermined the scientific basis of the publication and advised that the publication should be retracted. The online version of this article contains the full text of the retracted article as electronic supplementary material (Additional file 1). Additional file Additional file 1: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and-negative rheumatoid arthritis and osteoarthritis synovium. Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and-negative rheumatoid arthritis and osteoarthritis synovium. permits unrestricted use, distribution, and reproduction in any medium, provided you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons license, and indicate if changes were made. The Creative Commons Public Domain Dedication waiver",
+   "source_id": "7b7ecd2a727fee91d6c44b0cb9831babe543cf3c",
+   "doi": null,
+   "pmid": null,
+   "title": "R E T R a C T I O N N O T E Open Access Submit Your next Manuscript to Biomed Central and Take Full Advantage Of: @bullet Convenient Online Submission @bullet Thorough Peer Review @bullet No Space Constraints or Color Figure Charges @bullet Immediate Publication on Acceptance @bullet Inclusion in Pu",
+   "block": "block",
+   "pdf_hash": "7b7ecd2a727fee91d6c44b0cb9831babe543cf3c",
+   "year": 2011
+  },
+  "3286700761": {
+   "sourced_paper_id": "3286700761",
+   "source": "MergedPDFExtraction",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "WJ",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "EM",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "JM",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "Introduction: Mast cells have been implicated to play a functional role in arthritis, especially in autoantibodypositive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients. Methods: Synovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA. Results: The number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPARA and OA patients. Conclusions: The synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis. Introduction Rheumatoid arthritis (RA) is an autoimmune disease characterized by chronic inflammation of the synovial lining of the joint. In the majority of patients with established RA, anticitrullinated protein antibodies (ACPAs) can be found [1]. It is currently believed that ACPA+ and ACPA-RA are two different disease entities, each with its own pathogenesis [2]. Several cell types of the immune system play a role in the pathogenesis of RA. The presence of autoantibodies and the linkage of RA to human leukocyte antigen shared epitope alleles in ACPA+ RA indicate that the adaptive immune system plays a prominent role. However, cells of the innate immune system, such as mast cells, have also been implicated in pathogenesis of RA [3]. Indeed, the number of mast cells in synovial tissue is associated with inflammatory mediators such as histamine in synovial fluid [4]. Among the cytokines that are thought to be involved in RA, IL-17 has recently attracted considerable attention. IL-17 can induce production of other proinflammatory factors such as IL-6, IL-1, TNF and matrix metalloproteinases, leading to inflammation, breakdown of cartilage and bone erosion [5]. IL-17 deficient mice are less prone to develop experimental arthritis and blocking IL-17 can reduce both the onset and progression in these models [6]. In RA, high levels of IL-17 were found in synovial fluid, especially compared to OA patients [7]. The first proof-ofconcept trial indicates that neutralization of IL-17 is a potential new target for the treatment of RA [8]. * Correspondence: j.suurmond@lumc.nl Department of Rheumatology, Leiden University Medical Center, PO Box 9600, Albinusdreef 2, C1-R, NL-2300 RC Leiden, The Netherlands Full list of author information is available at the end of the article Suurmond et al. Arthritis Research & Therapy 2011, 13:R150 http://arthritis-research.com/content/13/5/R150 © 2011 Suurmond et al.; licensee BioMed Central Ltd. This is an open access article distributed under the terms of the Creative Commons Attribution License http://creativecommons.org/licenses/by/2.0, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited. On the basis of the data described above, it is postulated that Th17 cells, through the production of IL-17 and other Th17-associated cytokines, play a prominent role in the inflamed synovium by perpetuating the inflammatory milieu observed in arthritis [6]. Interestingly, a recent study by Hueber et al. [9] indicated that the mast cell is the most abundant cell type expressing IL-17 in the synovial tissue of 10 RA patients. However, other studies have shown the presence of IL-17-producing T cells in RA patients [10]. Because previous investigators have reported that ACPA+ and ACPARA are distinct disease entities [2], our aim in the present study was to analyze which cell subsets express IL-17 in the synovial tissue of ACPA+ RA, ACPA-RA and OA patients. Materials and methods",
+   "source_id": "799b2f6c931eb9f04547a7d9a8cc4f430c4321ff",
+   "doi": null,
+   "pmid": null,
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": "799b2f6c931eb9f04547a7d9a8cc4f430c4321ff",
+   "year": 2011
+  },
+  "3310699750": {
+   "sourced_paper_id": "3310699750",
+   "source": "PubMedCentral",
+   "venue": "Arthritis Research & Therapy",
+   "journal_name": "Arthritis Research & Therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "WJ",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "EM",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "JM",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "Introduction Mast cells have been implicated to play a functional role in arthritis, especially in autoantibody-positive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients. Methods Synovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA. Results The number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPA- RA and OA patients. Conclusions The synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis.",
+   "source_id": "3308080",
+   "doi": "10.1186/ar3466",
+   "pmid": "21933391",
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2011
+  },
+  "52017108": {
+   "sourced_paper_id": "52017108",
+   "source": "Anansi",
+   "venue": null,
+   "journal_name": null,
+   "authors": [],
+   "abstract": null,
+   "source_id": "7b7ecd2a727fee91d6c44b0cb9831babe543cf3c",
+   "doi": null,
+   "pmid": null,
+   "title": null,
+   "block": "block",
+   "pdf_hash": "7b7ecd2a727fee91d6c44b0cb9831babe543cf3c",
+   "year": null
+  },
+  "67028303": {
+   "sourced_paper_id": "67028303",
+   "source": "Medline",
+   "venue": "Arthritis research & therapy",
+   "journal_name": "Arthritis research & therapy",
+   "authors": [
+    {
+     "author_info_first": "Jolien",
+     "author_info_middle": null,
+     "author_info_last": "Suurmond",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemarie",
+     "author_info_middle": "L",
+     "author_info_last": "Dorjée",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Mariëtte",
+     "author_info_middle": "R",
+     "author_info_last": "Boon",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Edward",
+     "author_info_middle": "F",
+     "author_info_last": "Knol",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Tom",
+     "author_info_middle": "W",
+     "author_info_last": "Huizinga",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "René",
+     "author_info_middle": "E",
+     "author_info_last": "Toes",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Annemie",
+     "author_info_middle": "J",
+     "author_info_last": "Schuerwegh",
+     "author_info_suffix": null
+    }
+   ],
+   "abstract": "INTRODUCTION\nMast cells have been implicated to play a functional role in arthritis, especially in autoantibody-positive disease. Among the cytokines involved in rheumatoid arthritis (RA), IL-17 is an important inflammatory mediator. Recent data suggest that the synovial mast cell is a main producer of IL-17, although T cells have also been implicated as prominent IL-17 producers as well. We aimed to identify IL-17 expression by mast cells and T cells in synovium of arthritis patients.\n\n\nMETHODS\nSynovial samples of anticitrullinated protein antibody-positive (ACPA+) and ACPA-negative (ACPA-) RA and osteoarthritis (OA) patients were stained for IL-17 in combination with CD117 (mast cells), CD3 (T cells) and CD68 (macrophages). Concentrations of IL-17 in synovial fluid were determined by ELISA.\n\n\nRESULTS\nThe number of IL-17+ cells in synovium was comparable in all groups. Although the vast majority of IL-17+ cells are mast cells, no difference in the percentage of IL-17+ mast cells was observed. Nonetheless, levels of IL-17 in synovial fluid were increased in ACPA+ RA patients compared to ACPA- RA and OA patients.\n\n\nCONCLUSIONS\nThe synovial mast cell is the main IL-17+ cell in all three arthritis groups analyzed. These data are relevant for studies aimed at blocking IL-17 in the treatment of arthritis.",
+   "source_id": "21933391v1",
+   "doi": "10.1186/ar3466",
+   "pmid": "21933391",
+   "title": "Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium.",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2011
+  },
+  "74276376": {
+   "sourced_paper_id": "74276376",
+   "source": "Medline",
+   "venue": "Arthritis research & therapy",
+   "journal_name": "Arthritis research & therapy",
+   "authors": [],
+   "abstract": null,
+   "source_id": "26653257v1",
+   "doi": "10.1186/s13075-015-0847-3",
+   "pmid": "26653257",
+   "title": "Retraction Note: Mast cells are the main interleukin 17-positive cells in anticitrullinated protein antibody-positive and -negative rheumatoid arthritis and osteoarthritis synovium.",
+   "block": "block",
+   "pdf_hash": null,
+   "year": 2015
+  }
  }
 }

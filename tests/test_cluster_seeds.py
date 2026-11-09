@@ -105,6 +105,22 @@ def test_a_disallowed_pair_stays_apart_despite_a_shared_doi(predictor, papers):
     assert seeded[key] != seeded["copy"]
 
 
+@pytest.mark.parametrize("order", ["abc", "bca", "cab"])
+def test_copies_a_seed_keeps_from_one_paper_still_join_each_other(order):
+    # Each copy is refused by "a"; they must still try, and join, each other.
+    from s2apler.data import PDData
+    from s2apler.model import _join_clusters_by_ids
+
+    records = {
+        pid: {"title": None, "doi": "10.1/x", "authors": [{"first": "Ann", "last": "Lee"}], "block": "b", "year": 2020}
+        for pid in order
+    }
+    seeds = {"a": {"b": "disallow", "c": "disallow"}}
+    dataset = PDData(records, name="seeds", mode="inference", cluster_seeds=seeds)
+    joined = dict(zip(order, _join_clusters_by_ids(list(order), [0, 1, 2], dataset, 0, True)))
+    assert joined["b"] == joined["c"] != joined["a"]
+
+
 def test_require_seeds_still_cluster_incrementally(predictor, papers, monkeypatch):
     calls = []
     original = predictor.clusterer.predict_incremental

@@ -336,10 +336,13 @@ class PDData:
     def get_correction_notices(self) -> Set[str]:
         """Finds the papers that are correction notices.
 
-        A notice's copies from other sources often drop the "Correction:" prefix, and its PDF
-        often carries the article's title. Papers linked by a shared DOI, PMID or usable
-        pdf_hash end up in one cluster anyway, so when any of them is a "Correction: X" paper,
-        all of them are notices.
+        Papers linked by a shared DOI, PMID or usable pdf_hash end up in one cluster, so each
+        linked group is all notices or none; anything else would contradict the forced merge.
+        A group is a notice when it holds a "Correction: X" paper, because a notice's copies
+        often drop the prefix and its PDF often carries the article's title. It is also a
+        notice when every titled paper in it is one. A group mixing other notice titles, such
+        as "Retraction note: X", with plain titles counts as the article: such records
+        sometimes carry the article's own DOI.
 
         Returns
         -------
@@ -360,12 +363,16 @@ class PDData:
                     parent[find(paper_id)] = find(first_with_key[key])
                 else:
                     first_with_key[key] = paper_id
-        notice_roots = {find(pid) for pid, paper in self.papers.items() if marks_notice_identifiers(paper.title)}
-        return {
-            paper_id
-            for paper_id, paper in self.papers.items()
-            if is_correction_notice(paper.title) or find(paper_id) in notice_roots
-        }
+        marked: Set[str] = set()
+        titled_notices: Dict[str, bool] = {}
+        for paper_id, paper in self.papers.items():
+            root = find(paper_id)
+            if marks_notice_identifiers(paper.title):
+                marked.add(root)
+            if paper.title:
+                titled_notices[root] = titled_notices.get(root, True) and is_correction_notice(paper.title)
+        notice_roots = marked | {root for root, all_notices in titled_notices.items() if all_notices}
+        return {paper_id for paper_id in self.papers if find(paper_id) in notice_roots}
 
     def id_merge_keys(self, paper_id: str) -> List[Tuple[str, str]]:
         """Lists the identifiers that force a paper into the same cluster as others.

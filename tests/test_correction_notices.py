@@ -69,8 +69,9 @@ def test_copies_of_a_named_notice_count_as_notices():
 
 
 @pytest.mark.parametrize("title", ["Correction", "Retraction note: That gut feeling", "Expression of concern: X"])
-def test_notices_that_may_carry_the_article_doi_mark_only_themselves(title):
-    # Such records sometimes carry the corrected or retracted article's own DOI.
+def test_notice_titles_sharing_the_article_doi_count_as_the_article(title):
+    # Such records sometimes carry the corrected or retracted article's own DOI. The DOI forces
+    # them into the article's cluster, so marking them would push the article's copies out.
     dataset = dataset_of(
         {
             "notice": {"title": title, "doi": "10.1/article"},
@@ -78,9 +79,21 @@ def test_notices_that_may_carry_the_article_doi_mark_only_themselves(title):
             "article_pdf": {"title": "That gut feeling"},
         }
     )
-    assert dataset.correction_notices == {"notice"}
-    # Shared identifiers still merge: the notice carries the article's DOI.
+    assert dataset.correction_notices == set()
     assert dataset.get_constraint("notice", "article") == 0
+    assert dataset.get_constraint("notice", "article_pdf") is None
+
+
+def test_groups_holding_only_notice_titles_are_notices():
+    dataset = dataset_of(
+        {
+            "retraction": {"title": "Retraction note: That gut feeling", "doi": "10.1/notice", "pdf_hash": "n"},
+            "retraction_pdf": {"title": None, "pdf_hash": "n"},
+            "bare": {"title": "Erratum"},
+            "article": {"title": "That gut feeling", "doi": "10.1/article"},
+        }
+    )
+    assert dataset.correction_notices == {"retraction", "retraction_pdf", "bare"}
 
 
 def test_array_constraints_match_per_pair_rules_with_notices():
@@ -126,6 +139,24 @@ def test_real_notices_cluster_apart_from_their_articles(predictor, case, article
     notice = {cluster_of[pid] for pid, r in records.items() if (r["doi"] or "").lower() == notice_doi}
     # Every copy of each work stays together, and the two works stay apart.
     assert len(article) == 1 and len(notice) == 1 and article != notice
+
+
+def test_a_notice_carrying_the_article_doi_keeps_the_article_whole(predictor):
+    # A MAG "Retraction Note" record carries the retracted article's DOI. The article's copies
+    # without identifiers must stay in the article's cluster, apart from the real notice.
+    from s2apler.timo.interface import Instance
+
+    with open(FIXTURE, encoding="utf-8") as f:
+        records = json.load(f)["mast_cells"]
+    prediction = predictor.predict_one(Instance(papers=records)).prediction
+    cluster_of = {pid: key for key, members in prediction.items() for pid in members}
+    assert sorted(cluster_of) == sorted(records)
+    article = {"2038844007", "3310699750", "67028303", "1524897677", "1824594924"}
+    copies = {"3286700761", "1459784667", "1431315993", "1444693022"}
+    notice = {"74276376", "1824706971", "1996170033", "2039593257"}
+    assert len({cluster_of[pid] for pid in article | copies}) == 1
+    assert len({cluster_of[pid] for pid in notice}) == 1
+    assert cluster_of["2038844007"] != cluster_of["74276376"]
 
 
 def test_notice_status_follows_shared_pdf_hashes():

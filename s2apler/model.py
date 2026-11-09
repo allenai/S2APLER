@@ -122,14 +122,16 @@ def _join_clusters_by_ids(
         parent[merged] = kept
         members[kept].extend(members.pop(merged))
 
-    first_label_for_key: Dict[Tuple[str, str], int] = {}
+    # A refused join leaves several groups behind one key. Try each, so a paper the first
+    # group refuses can still join another.
+    groups_for_key: Dict[Tuple[str, str], List[int]] = {}
     for paper_id, label in zip(paper_ids, labels):
         is_titled = label < first_null_label
         for key in dataset.id_merge_keys(paper_id):
-            if key in first_label_for_key:
-                union(first_label_for_key[key], label, may_join_titled=join_titled and is_titled)
-            else:
-                first_label_for_key[key] = label
+            earlier = groups_for_key.get(key, [])
+            for other in earlier:
+                union(other, label, may_join_titled=join_titled and is_titled)
+            groups_for_key[key] = list(dict.fromkeys(find(group) for group in [*earlier, label]))
 
     # Number null-only groups consecutively, as before, so unchanged clusters keep their keys.
     renumbered: Dict[int, int] = {}
