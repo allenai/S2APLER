@@ -20,6 +20,14 @@ one source archive and wheels for Linux (manylinux x86_64 and aarch64, musllinux
    uploads with PyPI trusted publishing, which the `s2apler` PyPI project must allow for this
    repository and workflow.
 
+## First release
+
+`s2apler` is not on PyPI yet, so before the first dispatch:
+
+1. Create a `pypi` environment in the GitHub repository settings, with required reviewers.
+2. On PyPI, add a pending trusted publisher for the `s2apler` project: owner `allenai`,
+   repository `S2APLER`, workflow `release-rust.yml`, environment `pypi`.
+
 ## Beta pre-releases
 
 A beta lets integrators test a build before a final release.
