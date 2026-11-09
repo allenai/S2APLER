@@ -105,3 +105,46 @@ def test_matches_lightgbm_on_the_production_model():
     native = NativeLightGBMClassifier.from_lgbm(production, num_threads=4)
     rows = edge_rows(production, 18, seed=5)
     assert np.array_equal(native.predict_proba(rows), production.predict_proba(rows))
+
+
+def test_scoring_classifier_caches_per_fit_and_falls_back(classifier):
+    from s2apler.native_scorer import scoring_classifier
+
+    native = scoring_classifier(classifier, num_threads=2)
+    assert isinstance(native, NativeLightGBMClassifier)
+    assert scoring_classifier(classifier, num_threads=3) is native and native.num_threads == 3
+    # A refit makes a new booster, so it must get a new scorer.
+    refit = pickle.loads(pickle.dumps(classifier))
+    refit.fit(rows()[:500], (np.nan_to_num(rows()[:500, 1]) > 0.5).astype(int))
+    assert scoring_classifier(refit, num_threads=1) is not native
+    # Models the native booster can't reproduce score with LightGBM itself.
+    early = pickle.loads(pickle.dumps(classifier))
+    early.set_params(pred_early_stop=True)
+    assert scoring_classifier(early, num_threads=1) is early
+    plain = object()
+    assert scoring_classifier(plain, num_threads=1) is plain
+
+
+def test_clusterer_distances_match_lightgbm(monkeypatch):
+    import s2apler.model as model
+    from s2apler.data import PDData
+    from s2apler.featurizer import FeaturizationInfo
+
+    dataset = PDData("tests/test_dataset/papers.json", name="test_dataset", mode="inference")
+    rng = np.random.default_rng(0)
+    lightgbm_model = lgb.LGBMClassifier(n_estimators=30, random_state=0, verbose=-1).fit(
+        rng.random((400, 8)), rng.integers(0, 2, 400)
+    )
+    clusterer = model.Clusterer(
+        featurizer_info=FeaturizationInfo(features_to_use=["year_diff", "title_similarity"]),
+        classifier=lightgbm_model,
+        n_jobs=1,
+        use_cache=False,
+    )
+    blocks = {key: papers for key, papers in dataset.get_blocks().items() if len(papers) > 2}
+    native = clusterer.make_distance_matrices(blocks, dataset, disable_tqdm=True)
+    monkeypatch.setattr(model, "scoring_classifier", lambda classifier, num_threads: classifier)
+    reference = clusterer.make_distance_matrices(blocks, dataset, disable_tqdm=True)
+    assert native.keys() == reference.keys()
+    for key in native:
+        assert np.array_equal(native[key], reference[key])
