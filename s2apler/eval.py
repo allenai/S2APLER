@@ -20,7 +20,6 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import precision_recall_curve
-from sklearn.calibration import CalibratedClassifierCV
 
 
 logger = logging.getLogger("s2apler")
@@ -102,7 +101,7 @@ def _positive_class_shap_values(model: Any, X: Optional[np.ndarray]) -> np.ndarr
     Parameters
     ----------
     model: Any
-        a fitted tree classifier, or a CalibratedClassifierCV around one
+        a fitted tree classifier
     X: np.ndarray
         the feature rows to explain
 
@@ -110,8 +109,6 @@ def _positive_class_shap_values(model: Any, X: Optional[np.ndarray]) -> np.ndarr
     -------
     np.ndarray: the positive-class SHAP values
     """
-    if isinstance(model, CalibratedClassifierCV):
-        model = model.estimator
     values = shap.TreeExplainer(model).shap_values(X)
     if isinstance(values, list):
         return values[1]
