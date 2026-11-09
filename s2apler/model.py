@@ -4,6 +4,8 @@ from s2apler.eval import b3_precision_recall_fscore
 from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
 from s2apler.data import PDData
 from s2apler.consts import LARGE_INTEGER, DEFAULT_CHUNK_SIZE
+from s2apler.native_scorer import scoring_classifier
+from s2and.thread_config import resolve_n_jobs
 
 from typing import Dict, Optional, Any, Union, List, Tuple, cast
 from collections import defaultdict
@@ -212,6 +214,22 @@ class Clusterer:
         self.best_params: Optional[Dict[Any, Any]] = None
         self.batch_size = batch_size
 
+    def _scorer(self, classifier: Any) -> Any:
+        """Returns what scores pairs for `classifier`: the native booster when it is exact.
+
+        Parameters
+        ----------
+        classifier: Any
+            the pairwise classifier
+
+        Returns
+        -------
+        Any: an object with `predict_proba`
+        """
+        # n_jobs below 1 follows scikit-learn (-1 is all CPUs); 0 runs on one thread.
+        num_threads = resolve_n_jobs(self.n_jobs) if self.n_jobs != 0 else 1
+        return scoring_classifier(classifier, num_threads)
+
     @staticmethod
     def filter_blocks(block_dict: Dict[str, List[str]], num_to_keep: Optional[int] = None) -> Dict[str, List[str]]:
         """
@@ -385,15 +403,15 @@ class Clusterer:
             if np.any(predict_flag):
                 if self.nameless_classifier is not None:
                     batch_predictions[predict_flag] = (
-                        self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
-                        + self.nameless_classifier.predict_proba(
+                        self._scorer(self.classifier).predict_proba(batch_features[predict_flag, :])[:, 0]
+                        + self._scorer(self.nameless_classifier).predict_proba(
                             batch_nameless_features[predict_flag, :]  # type: ignore
                         )[:, 0]
                     ) / 2
                 else:
-                    batch_predictions[predict_flag] = self.classifier.predict_proba(batch_features[predict_flag, :])[
-                        :, 0
-                    ]
+                    batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
+                        batch_features[predict_flag, :]
+                    )[:, 0]
             if np.any(not_predict_flag):
                 batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
@@ -772,13 +790,15 @@ class Clusterer:
         if np.any(predict_flag):
             if self.nameless_classifier is not None:
                 batch_predictions[predict_flag] = (
-                    self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
-                    + self.nameless_classifier.predict_proba(batch_nameless_features[predict_flag, :])[  # type: ignore
-                        :, 0
-                    ]
+                    self._scorer(self.classifier).predict_proba(batch_features[predict_flag, :])[:, 0]
+                    + self._scorer(self.nameless_classifier).predict_proba(
+                        batch_nameless_features[predict_flag, :]  # type: ignore
+                    )[:, 0]
                 ) / 2
             else:
-                batch_predictions[predict_flag] = self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
+                batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
+                    batch_features[predict_flag, :]
+                )[:, 0]
         if np.any(not_predict_flag):
             batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
