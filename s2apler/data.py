@@ -180,6 +180,8 @@ class PDData:
         name: str,
         mode: str = "train",
         clusters: Optional[Union[str, Dict]] = None,
+        # Keyword-only: removed parameters used to sit here, so old positional calls must fail.
+        *,
         cluster_seeds: Optional[Union[str, Dict]] = None,
         altered_cluster_papers: Optional[Union[str, List, Set]] = None,
         num_clusters_for_block_size: int = 1,

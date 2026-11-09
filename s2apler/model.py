@@ -204,6 +204,8 @@ class Clusterer:
         search_space: Optional[Dict[str, Any]] = None,
         n_iter: int = 25,
         n_jobs: int = 16,
+        # Keyword-only: removed parameters used to sit here, so old positional calls must fail.
+        *,
         use_default_constraints_as_supervision: bool = True,
         random_state: int = 42,
         dont_merge_cluster_seeds: bool = True,
