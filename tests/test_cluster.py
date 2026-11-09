@@ -33,7 +33,6 @@ class TestClusterer(unittest.TestCase):
                 X_random, y_random
             ),
             n_jobs=1,
-            use_cache=False,
             use_default_constraints_as_supervision=False,
         )
 
@@ -76,7 +75,6 @@ class TestClustererFit(unittest.TestCase):
                 np.random.random((10, 8)), np.random.randint(0, 2, 10)
             ),
             n_jobs=1,
-            use_cache=False,
             n_iter=3,
         )
         return dataset, clusterer

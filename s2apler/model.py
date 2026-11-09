@@ -3,7 +3,7 @@ from __future__ import annotations
 from s2apler.eval import b3_precision_recall_fscore
 from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
 from s2apler.data import PDData
-from s2apler.consts import LARGE_INTEGER, DEFAULT_CHUNK_SIZE
+from s2apler.consts import LARGE_INTEGER
 from s2apler.native_scorer import scoring_classifier
 from s2and.thread_config import resolve_n_jobs
 
@@ -150,7 +150,7 @@ class Clusterer:
         val_blocks_size: int
             How many blocks to use during hyperparam optimization.
             Defaults to None, which uses all of them.
-        cluster_model: sklearn compatible model
+        cluster_model: FastCluster
             Clusterer model
             Defaults to None, which uses FastCluster with average linking.
         search_space: Dict
@@ -160,18 +160,11 @@ class Clusterer:
             Number of hyperparameter evaluations
         n_jobs: int
             Parallelize each clusterer this many ways
-        use_cache: bool
-            Whether to use the cache when making distance matrices
         use_default_constraints_as_supervision: bool
             Whether to use the default constraints when constructing the distance matrices.
             These are high precision and can save a lot of compute/time.
         random_state: int
             Random state
-        nameless_classifier: sklearn compatible model
-            A second classifier which uses pairwise features excluding all name information, and
-            whose predictions are averaged with the main classifier. Won't be used if None
-        nameless_featurizer_info: FeaturizationInfo
-            The FeaturizationInfo for the second classifier. Won't be used if None
         dont_merge_cluster_seeds: bool
             this flag controls whether to use cluster seeds to enforce "dont merge"
             as well as "must merge" constraints
@@ -184,33 +177,30 @@ class Clusterer:
         featurizer_info: FeaturizationInfo,
         classifier: Any,
         val_blocks_size: Optional[int] = None,
-        cluster_model: Optional[Any] = None,
+        cluster_model: Optional[FastCluster] = None,
         search_space: Optional[Dict[str, Any]] = None,
         n_iter: int = 25,
         n_jobs: int = 16,
-        use_cache: bool = False,
         use_default_constraints_as_supervision: bool = True,
         random_state: int = 42,
-        nameless_classifier: Optional[Any] = None,
-        nameless_featurizer_info: Optional[FeaturizationInfo] = None,
         dont_merge_cluster_seeds: bool = True,
         batch_size: int = 1000000,
     ):
         self.featurizer_info = featurizer_info
-        self.nameless_featurizer_info = nameless_featurizer_info
         self.classifier = copy.deepcopy(classifier)
-        self.nameless_classifier = copy.deepcopy(nameless_classifier)
         self.val_blocks_size = val_blocks_size
         self.n_iter = n_iter
         self.n_jobs = n_jobs
         self.random_state = random_state
-        self.use_cache = use_cache
         self.use_default_constraints_as_supervision = use_default_constraints_as_supervision
         self.dont_merge_cluster_seeds = dont_merge_cluster_seeds
         if cluster_model is None:
             self.cluster_model = FastCluster(linkage="average")
-        else:
+        elif isinstance(cluster_model, FastCluster):
             self.cluster_model = copy.deepcopy(cluster_model)
+        else:
+            # Distances are built as condensed vectors, which only FastCluster reads.
+            raise TypeError(f"cluster_model must be a FastCluster, got {type(cluster_model).__name__}")
 
         if search_space is None:
             self.search_space = {"eps": hp.uniform("eps", 0.2, 0.8)}
@@ -349,12 +339,8 @@ class Clusterer:
         for block_key, paper_ids in block_dict.items():
             block_size = len(paper_ids)
             num_pairs += int(block_size * (block_size - 1) / 2)
-            if isinstance(self.cluster_model, FastCluster):
-                # flattened pdist style
-                pairwise_proba = np.zeros(int(block_size * (block_size - 1) / 2), dtype=np.float16)
-            else:
-                pairwise_proba = np.zeros((block_size, block_size), dtype=np.float16)
-            pairwise_probas[block_key] = pairwise_proba
+            # flattened pdist style
+            pairwise_probas[block_key] = np.zeros(int(block_size * (block_size - 1) / 2), dtype=np.float16)
 
         logger.debug("Pairwise probas initialized, starting making all pairs")
 
@@ -373,13 +359,11 @@ class Clusterer:
             logger.debug(f"Featurizing batch {batch_num}/{num_batches}")
             count = 0
             pairs = []
-            indices = []
             blocks = []
             logger.debug("Getting constraints")
             # iterate over a batch_size number of pairs
             for item in helper_output:
                 pairs.append(item[0])
-                indices.append(item[1])
                 blocks.append(item[2])
                 count += 1
                 if count == self.batch_size:
@@ -388,15 +372,7 @@ class Clusterer:
             if len(pairs) == 0:
                 break
 
-            batch_features, _, batch_nameless_features = many_pairs_featurize(
-                pairs,
-                dataset,
-                self.featurizer_info,
-                self.n_jobs,
-                use_cache=self.use_cache,
-                chunk_size=DEFAULT_CHUNK_SIZE,
-                nameless_featurizer_info=self.nameless_featurizer_info,
-            )
+            batch_features, _ = many_pairs_featurize(pairs, dataset, self.featurizer_info, self.n_jobs)
             # get predictions where there isn't partial supervision
             # and fill the rest with partial supervision
             # undoing the offset by LARGE_INTEGER from above
@@ -408,17 +384,9 @@ class Clusterer:
             # index 0 is p(not the same)
             logger.debug("Pairwise classification")
             if np.any(predict_flag):
-                if self.nameless_classifier is not None:
-                    batch_predictions[predict_flag] = (
-                        self._scorer(self.classifier).predict_proba(batch_features[predict_flag, :])[:, 0]
-                        + self._scorer(self.nameless_classifier).predict_proba(
-                            batch_nameless_features[predict_flag, :]  # type: ignore
-                        )[:, 0]
-                    ) / 2
-                else:
-                    batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
-                        batch_features[predict_flag, :]
-                    )[:, 0]
+                batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
+                    batch_features[predict_flag, :]
+                )[:, 0]
             if np.any(not_predict_flag):
                 batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
@@ -434,13 +402,8 @@ class Clusterer:
                     block_key_start_index = blocks.index(block_key) + (batch_num * self.batch_size)
                     pairwise_proba = pairwise_probas[block_key]
 
-                if isinstance(self.cluster_model, FastCluster):
-                    index = (batch_num * self.batch_size + within_batch_index) - block_key_start_index
-
-                    pairwise_proba[index] = prediction
-                else:
-                    i, j = indices[within_batch_index]
-                    pairwise_proba[i, j] = prediction
+                index = (batch_num * self.batch_size + within_batch_index) - block_key_start_index
+                pairwise_proba[index] = prediction
 
                 prev_block_key = block_key
 
@@ -448,11 +411,6 @@ class Clusterer:
                 break
 
             batch_num += 1
-
-        if not isinstance(self.cluster_model, FastCluster):
-            for pairwise_proba in pairwise_probas.values():
-                pairwise_proba += pairwise_proba.T
-                np.fill_diagonal(pairwise_proba, 0)
 
         logger.debug(f"{len(block_dict)} distance matrices made")
         return pairwise_probas
@@ -489,13 +447,8 @@ class Clusterer:
         weights = []
         for dataset in datasets:
             # blocks
-            train_block_dict, val_block_dict, _ = dataset.split_cluster_papers()
-            # incremental setting uses all the paper_ids in train and val
-            # block-wise split uses only validation set for building the clustering model
-            if dataset.unit_of_data_split == "time" or dataset.unit_of_data_split == "papers":
-                for block_key, paper_ids in train_block_dict.items():
-                    if block_key in val_block_dict:
-                        val_block_dict[block_key].extend(paper_ids)
+            # the block-wise split uses only the validation blocks to fit the clustering model
+            _, val_block_dict, _ = dataset.split_cluster_papers()
 
             # we don't need val blocks with only a single element
             val_block_dict = self.filter_blocks(val_block_dict, self.val_blocks_size)
@@ -549,7 +502,7 @@ class Clusterer:
             algo=partial(tpe.suggest, n_startup_jobs=5),
             max_evals=self.n_iter,
             trials=self.hyperopt_trials_store,
-            # hyperopt 0.2.7 calls rstate.integers, which only numpy Generators have.
+            # hyperopt calls rstate.integers, which only numpy Generators have.
             rstate=np.random.default_rng(self.random_state),
         )
         # hyperopt has some problems with hp.choice so we need to do this:
@@ -652,7 +605,7 @@ class Clusterer:
                     raise ValueError(f"No distance matrix for block {block_key!r} with {len(titled_paper_ids)} papers")
                 # Distances are read by position, so a matrix built over other papers mislabels silently.
                 n = len(titled_paper_ids)
-                expected_shape = (n * (n - 1) // 2,) if dists[block_key].ndim == 1 else (n, n)
+                expected_shape = (n * (n - 1) // 2,)
                 if dists[block_key].shape != expected_shape:
                     raise ValueError(
                         f"Distance matrix for block {block_key!r} has shape {dists[block_key].shape}, "
@@ -663,15 +616,7 @@ class Clusterer:
                     # annoying sparse matrix not sorted warning
                     warnings.simplefilter("ignore", category=EfficiencyWarning)
                     cluster_model.fit(dists[block_key])
-                labels = cluster_model.labels_
-                # in HDBSCAN the labels of -1 are actually "outliers"
-                # each of these gets its own label starting at
-                # max label + 1 and going up
-                max_label = labels.max()
-                negative_one_label_locations = np.where(labels == -1)[0]
-                for i, loc in enumerate(negative_one_label_locations):
-                    labels[loc] = max_label + 1 + i
-                labels = [int(label) for label in labels]
+                labels = [int(label) for label in cluster_model.labels_]
             else:
                 labels = [0] * len(titled_paper_ids)
 
@@ -774,15 +719,7 @@ class Clusterer:
                         label = value - LARGE_INTEGER
                 all_pairs.append((unassigned_paper, paper_id, label))
 
-        batch_features, _, batch_nameless_features = many_pairs_featurize(
-            all_pairs,
-            dataset,
-            self.featurizer_info,
-            self.n_jobs,
-            use_cache=self.use_cache,
-            chunk_size=DEFAULT_CHUNK_SIZE,
-            nameless_featurizer_info=self.nameless_featurizer_info,
-        )
+        batch_features, _ = many_pairs_featurize(all_pairs, dataset, self.featurizer_info, self.n_jobs)
 
         # get predictions where there isn't partial supervision
         # and fill the rest with partial supervision
@@ -795,17 +732,9 @@ class Clusterer:
         # index 0 is p(not the same)
         logger.debug("Pairwise classification")
         if np.any(predict_flag):
-            if self.nameless_classifier is not None:
-                batch_predictions[predict_flag] = (
-                    self._scorer(self.classifier).predict_proba(batch_features[predict_flag, :])[:, 0]
-                    + self._scorer(self.nameless_classifier).predict_proba(
-                        batch_nameless_features[predict_flag, :]  # type: ignore
-                    )[:, 0]
-                ) / 2
-            else:
-                batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
-                    batch_features[predict_flag, :]
-                )[:, 0]
+            batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
+                batch_features[predict_flag, :]
+            )[:, 0]
         if np.any(not_predict_flag):
             batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
@@ -815,8 +744,6 @@ class Clusterer:
         )
         for papers_pair, dist in zip(all_pairs, batch_predictions):
             unassigned_paper, assigned_paper, _ = papers_pair
-            if assigned_paper not in cluster_seeds_require:
-                continue
             cluster_id = cluster_seeds_require[assigned_paper]
             previous_average, previous_count = papers_to_cluster_to_average_dist[unassigned_paper][cluster_id]
             papers_to_cluster_to_average_dist[unassigned_paper][cluster_id] = (
@@ -841,13 +768,9 @@ class Clusterer:
                     best_dist = average_dist
             if best_cluster_id is not None:
                 # undo the reclustering step
-                new_name_disallowed = False
                 if best_cluster_id in recluster_map:
                     best_cluster_id = recluster_map[best_cluster_id]
-                if new_name_disallowed:
-                    singleton_papers.append(unassigned_paper)
-                else:
-                    pred_clusters[f"{best_cluster_id}"].append(unassigned_paper)
+                pred_clusters[f"{best_cluster_id}"].append(unassigned_paper)
             else:
                 singleton_papers.append(unassigned_paper)
 
@@ -873,9 +796,6 @@ class PairwiseModeler:
     search_space: Dict:
             A hyperopt search space for hyperparam optimization.
             Defaults to an appropriate LGBMClassifier space if not specified.
-    monotone_constraints: string
-            Monotonic constraints for lightbm only.
-            Defaults to None and is not used.
     n_iter: int
         Number of iterations for hyperparam optimization.
     n_jobs: int
@@ -889,7 +809,6 @@ class PairwiseModeler:
         self,
         estimator: Optional[Any] = None,
         search_space: Optional[Dict[str, Any]] = None,
-        monotone_constraints: Optional[str] = None,
         n_iter: int = 50,
         n_jobs: int = 16,  # for the model, not the hyperopt
         random_state: int = 42,
@@ -922,12 +841,6 @@ class PairwiseModeler:
             }
         else:
             self.search_space = search_space
-
-        self.monotone_constraints = monotone_constraints
-        if self.monotone_constraints is not None and isinstance(self.estimator, lgb.LGBMClassifier):
-            self.estimator.set_params(monotone_constraints=self.monotone_constraints)
-            self.estimator.set_params(monotone_constraints_method="advanced")
-            self.search_space["monotone_penalty"] = hp.uniform("monotone_penalty", 0, 5)
 
         self.n_iter = n_iter
         self.n_jobs = n_jobs
@@ -995,111 +908,6 @@ class PairwiseModeler:
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         assert self.classifier is not None, "You need to call fit first"
         return self.classifier.predict_proba(X)
-
-
-class VotingClassifier:
-    """
-    Stripped-down version of VotingClassifier that uses prefit estimators
-
-    Parameters
-    ----------
-    estimators: List[sklearn classifier]
-        A list of sklearn classifiers that support predict_proba.
-    voting: string
-        Type of voting.
-        Defaults to "hard", can also be "soft".
-        "soft" means "take the highest average probability class" and
-        "hard" means "take the class that the plurality of the models pick"
-    weights: List or np.array
-        Weights for each estimator.
-    """
-
-    def __init__(self, estimators, voting="soft", weights=None):
-        self.estimators = estimators
-        self.voting = voting
-        self.weights = weights
-
-    def fit(self, X, y, sample_weight=None):
-        raise NotImplementedError
-
-    def predict(self, X):
-        """
-        Predict class labels for X.
-
-        Parameters
-        ----------
-        X: {array-like, sparse matrix}, shape = [n_samples, n_features]
-            Training vectors, where n_samples is the number of samples and
-            n_features is the number of features.
-
-        Returns
-        -------
-        predictions : array-like, shape = [n_samples]
-            Predicted class labels.
-        """
-        if self.voting == "soft":
-            predictions = np.argmax(self.predict_proba(X), axis=1)
-        elif self.voting == "hard":
-            predictions = np.apply_along_axis(
-                lambda x: np.argmax(np.bincount(x, weights=self.weights)),
-                axis=1,
-                arr=self._predict(X).astype("int"),
-            )
-        else:
-            raise Exception("Voting type must be one of 'soft' or 'hard'")
-        return predictions
-
-    def _collect_probas(self, X):
-        """Collect results from clf.predict calls."""
-        return np.asarray([clf.predict_proba(X) for clf in self.estimators])
-
-    def predict_proba(self, X):
-        """
-        Compute probabilities of possible outcomes for samples in X.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape = [n_samples, n_features]
-            Training vectors, where n_samples is the number of samples and
-            n_features is the number of features.
-
-        Returns
-        ----------
-        avg : array-like, shape = [n_samples, n_classes]
-            Weighted average probability for each class per sample.
-        """
-        if self.voting == "hard":
-            raise AttributeError("predict_proba is not available when voting=%r" % self.voting)
-        avg = np.average(self._collect_probas(X), axis=0, weights=self.weights)
-        return avg
-
-    def transform(self, X):
-        """
-        Return class labels or probabilities for X for each estimator.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape = [n_samples, n_features]
-            Training vectors, where n_samples is the number of samples and
-            n_features is the number of features.
-
-        Returns
-        -------
-        If `voting='soft'`:
-          array-like = [n_classifiers, n_samples, n_classes]
-            Class probabilities calculated by each classifier.
-        If `voting='hard'`:
-          array-like = [n_samples, n_classifiers]
-            Class labels predicted by each classifier.
-        """
-        if self.voting == "soft":
-            return self._collect_probas(X)
-        else:
-            return self._predict(X)
-
-    def _predict(self, X):
-        """Collect results from clf.predict calls."""
-        return np.asarray([clf.predict(X) for clf in self.estimators]).T
 
 
 def intify(x):

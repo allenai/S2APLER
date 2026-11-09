@@ -70,7 +70,7 @@ uv run --no-project python scripts/run_ci_locally.py lint
 uv run --no-project python scripts/run_ci_locally.py typecheck-and-test
 ```
 
-PR CI runs Python 3.11–3.13 on Ubuntu and Python 3.11 on Windows.
+PR CI runs Python 3.11–3.13 on Ubuntu and Python 3.11 on Windows and macOS.
 
 ## Version bumping
 
