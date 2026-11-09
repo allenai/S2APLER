@@ -95,11 +95,17 @@ def _join_clusters_by_ids(
     """
     parent = {label: label for label in labels}
     # A pair the cluster seeds disallow never joins, even through a shared identifier, so a
-    # split pinned by a seed stays split.
-    partners = dataset._disallow_partners() if dataset.cluster_seeds_disallow else {}
-    members: Dict[int, List[str]] = defaultdict(list)
-    for paper_id, label in zip(paper_ids, labels):
-        members[label].append(paper_id)
+    # split pinned by a seed stays split. Only seeds between papers of this block matter.
+    label_of = dict(zip(paper_ids, labels))
+    partners: Dict[str, List[str]] = {}
+    if dataset.cluster_seeds_disallow:
+        for paper_id, others in dataset._disallow_partners().items():
+            inside = [other for other in others if other in label_of]
+            if paper_id in label_of and inside:
+                partners[paper_id] = inside
+    seeded: Dict[int, List[str]] = defaultdict(list)
+    for paper_id in partners:
+        seeded[label_of[paper_id]].append(paper_id)
 
     def find(label: int) -> int:
         while parent[label] != label:
@@ -115,15 +121,19 @@ def _join_clusters_by_ids(
         if not may_join_titled and root_a < first_null_label and root_b < first_null_label:
             return
         if partners:
-            others = set(members[root_b])
-            if any(partner in others for paper_id in members[root_a] for partner in partners.get(paper_id, ())):
+            # Seeds are symmetric, so scanning the group with fewer seeded papers suffices.
+            fewer, more = sorted((root_a, root_b), key=lambda root: len(seeded.get(root, ())))
+            if any(find(label_of[other]) == more for paper_id in seeded.get(fewer, ()) for other in partners[paper_id]):
                 return
         kept, merged = min(root_a, root_b), max(root_a, root_b)
         parent[merged] = kept
-        members[kept].extend(members.pop(merged))
+        if merged in seeded:
+            seeded[kept].extend(seeded.pop(merged))
 
-    # A refused join leaves several groups behind one key. Try each, so a paper the first
-    # group refuses can still join another.
+    # A join a seed refuses leaves several groups behind one key. Then try each, so a paper the
+    # first group refuses can still join another. Without seeds, retrying cannot change the
+    # result: a refused join means both groups hold titled clusters, as does every other
+    # group left behind the key.
     groups_for_key: Dict[Tuple[str, str], List[int]] = {}
     for paper_id, label in zip(paper_ids, labels):
         is_titled = label < first_null_label
@@ -131,7 +141,10 @@ def _join_clusters_by_ids(
             earlier = groups_for_key.get(key, [])
             for other in earlier:
                 union(other, label, may_join_titled=join_titled and is_titled)
-            groups_for_key[key] = list(dict.fromkeys(find(group) for group in [*earlier, label]))
+            if partners:
+                groups_for_key[key] = list(dict.fromkeys(find(group) for group in [*earlier, label]))
+            elif not earlier:
+                groups_for_key[key] = [label]
 
     # Number null-only groups consecutively, as before, so unchanged clusters keep their keys.
     renumbered: Dict[int, int] = {}

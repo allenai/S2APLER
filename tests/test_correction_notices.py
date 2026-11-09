@@ -109,6 +109,31 @@ def test_array_constraints_match_per_pair_rules_with_notices():
                 assert (np.isnan(values[k]) and expected is None) or values[k] == expected
 
 
+def test_higher_rules_beat_the_notice_rule_in_both_paths():
+    # A source URI with a matching title, and a "require" seed, both outrank the notice rule.
+    records = {
+        "notice": {"title": "Correction: That gut feeling", "doi": "10.1/notice"},
+        "notice_copy": {"title": "That gut feeling", "doi": "10.1/notice", "source_uris": ["u"]},
+        "uri_copy": {"title": "That gut feeling", "source_uris": ["u"]},
+        "seeded": {"title": "That gut feeling", "doi": "10.1/article"},
+    }
+    papers = {
+        key: {"authors": [{"first": "Ann", "last": "Lee"}], "block": "b", "year": 2020, **record}
+        for key, record in records.items()
+    }
+    dataset = PDData(papers, name="notices", mode="inference", cluster_seeds={"notice": {"seeded": "require"}})
+    assert dataset.correction_notices == {"notice", "notice_copy"}
+    assert dataset.get_constraint("notice_copy", "uri_copy") == 0
+    assert dataset.get_constraint("notice", "seeded") == 0
+    assert dataset.get_constraint("notice", "uri_copy") == 1e4
+    ids = sorted(dataset.papers)
+    for left, right, first in _condensed_pair_chunks(len(ids), 50):
+        values = dataset.constraint_values(ids, left, right, first)
+        for k, (i, j) in enumerate(zip(left, right)):
+            expected = dataset.get_constraint(ids[i], ids[j])
+            assert (np.isnan(values[k]) and expected is None) or values[k] == expected
+
+
 @pytest.fixture(scope="module")
 def predictor():
     if not os.path.exists("data/prod_model.pickle"):
@@ -125,6 +150,8 @@ def predictor():
         ("hydrogel", "10.3389/fnut.2020.00088", "10.3389/fnut.2020.00128"),
         ("behcet", "10.1038/nrrheum.2017.208", "10.1038/nrrheum.2018.3"),
         ("gut_feeling", "10.1038/nrc.2016.122", "10.1038/nrc.2016.147"),
+        # The article's own PDF records carry the corrigendum's title.
+        ("rayleigh_taylor", "10.1088/0031-8949/92/1/014002", "10.1088/1402-4896/aa916c"),
     ],
 )
 def test_real_notices_cluster_apart_from_their_articles(predictor, case, article_doi, notice_doi):
@@ -157,6 +184,18 @@ def test_a_notice_carrying_the_article_doi_keeps_the_article_whole(predictor):
     assert len({cluster_of[pid] for pid in article | copies}) == 1
     assert len({cluster_of[pid] for pid in notice}) == 1
     assert cluster_of["2038844007"] != cluster_of["74276376"]
+
+
+def test_a_notice_title_linked_only_by_pdf_hash_does_not_mark_the_article():
+    # PDF extractions sometimes carry the notice's title but the article's PDF hash.
+    dataset = dataset_of(
+        {
+            "article": {"title": "Rayleigh mixing", "doi": "10.1/article", "pdf_hash": "a"},
+            "article_pdf": {"title": "Corrigendum: Rayleigh mixing", "doi": None, "pdf_hash": "a"},
+            "notice": {"title": "Corrigendum: Rayleigh mixing", "doi": "10.1/notice"},
+        }
+    )
+    assert dataset.correction_notices == {"notice"}
 
 
 def test_notice_status_follows_shared_pdf_hashes():

@@ -2491,5 +2491,1516 @@
    "pdf_hash": null,
    "year": 2015
   }
+ },
+ "rayleigh_taylor": {
+  "1804016222": {
+   "doi": "10.1007/s12591-013-0170-x",
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": "Allelopathic stimulators have some stabilizing role for the interaction between two or more competitive phytoplankton species within aquatic environment. Various models within deterministic environment are examined by several researchers to understand the role of allelo-chemicals to shape the dynamic behavior within deterministic environment. As plankton species are available within aquatic environment so they are subjected to environmental driving forces. In the present paper we have considered an existing and well established two-species competitive phytoplankton model where one species is toxic. We have revealed various interesting dynamical features of the model which were overlooked in the earlier studies. The stochastic model considered in this paper is obtained from the deterministic model by introducing multiplicative white noise terms. For the stochastic model, we have established the existence of global solution which ensures positivity and boundedness of the solution starting from an interior point of first quadrant in presence of environmental driving forces. Bounds for different order moments of solution are obtained and used to prove the stochastic boundedness of solution. The sufficient conditions for stochastic permanence are obtained and verified with the help of numerical examples. Analytical results are interpreted from ecological point of view.",
+   "source_id": "doi:10.1007/s12591-013-0170-x",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of a Competitive Phytoplankton Model with Allelopathy",
+   "source": "SpringerNature",
+   "sourced_paper_id": "1804016222",
+   "venue": null,
+   "journal_name": "Differential Equations and Dynamical Systems",
+   "authors": [
+    {
+     "author_info_first": "Partha",
+     "author_info_middle": "Sarathi",
+     "author_info_last": "Mandal",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Malay",
+     "author_info_middle": null,
+     "author_info_last": "Banerjee",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "2065328571345276928": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": "This study presents a prey–predator model incorporating the dual effects of prey vigilance and harvesting under both deterministic and stochastic frameworks. In the deterministic case, the positivity, boundedness,local and global stability of equilibria are analyzed along with the occurrence of Hopf bifurcations. Numerical simulations validate the analytical results and demonstrate how vigilance and harvesting influence population dynamics and system stability for suitable parameter values of the model. Results reveal that moderate vigilance stabilizes the system, while excessive vigilance or harvesting may drive populations to extinction. A sensitivity analysis identifies the parameters exerting the strongest influ - ence on prey and predator densities. The model is further extended to a stochastic framework by adding environmental noise to study its effect on system stability and species persistence. Environmental noise can disturb the system and may destabilize a deterministic system that is otherwise stable. The analysis reveals, as a novel finding, that excessive prey harvesting can lead to the extinction of both species, whereas excessive predator harvesting results in predator extinction, providing important insights for sustainable ecosystem management.",
+   "source_id": "edb15c35af44e299d8d4b0d4b55d670e40d5b84a",
+   "pdf_hash": "edb15c35af44e299d8d4b0d4b55d670e40d5b84a",
+   "title": "Deterministic and stochastic dynamics of prey-predator models with prey vigilance and harvesting",
+   "source": "ScienceParsePlus",
+   "sourced_paper_id": "2065328571345276928",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Bhagwan",
+     "author_info_middle": null,
+     "author_info_last": "Kumar",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Shivani",
+     "author_info_middle": null,
+     "author_info_last": "Khare",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Bipin",
+     "author_info_middle": null,
+     "author_info_last": "Kumar",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1630187600": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2000,
+   "abstract": null,
+   "source_id": "2414627705",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of vehicle-bridge interaction",
+   "source": "MAG",
+   "sourced_paper_id": "1630187600",
+   "venue": null,
+   "journal_name": "",
+   "authors": [
+    {
+     "author_info_first": "Qilin",
+     "author_info_middle": null,
+     "author_info_last": "Zhang",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": "C.",
+     "author_info_last": "Vrouwenvelder",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "J.",
+     "author_info_middle": null,
+     "author_info_last": "Wardenier",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1550416736291917824": {
+   "doi": "10.1088/1402-4896/aa916c",
+   "pmid": null,
+   "block": "block",
+   "year": 2017,
+   "abstract": null,
+   "source_id": "10.1088/1402-4896/aa916c",
+   "pdf_hash": "f4464be85a7debebfd19a6a442d1e3fd87071b1b",
+   "title": "Corrigendum: Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration (2017 Phys. Scr. 92 014002)",
+   "source": "IOP",
+   "sourced_paper_id": "1550416736291917824",
+   "venue": null,
+   "journal_name": "Physica Scripta",
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora",
+     "author_info_middle": "C",
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "S",
+     "author_info_middle": "I",
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "2074018770": {
+   "doi": "10.1088/1402-4896/aa916c",
+   "pmid": null,
+   "block": "block",
+   "year": 2017,
+   "abstract": null,
+   "source_id": "10.1088/1402-4896/aa916c",
+   "pdf_hash": null,
+   "title": "Corrigendum: Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration (2017 Phys. Scr. 92 014002)",
+   "source": "Unpaywall",
+   "sourced_paper_id": "2074018770",
+   "venue": "Physica Scripta",
+   "journal_name": "Physica Scripta",
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora C",
+     "author_info_middle": null,
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "S I",
+     "author_info_middle": null,
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "2123763814": {
+   "doi": "10.1007/978-3-0348-0451-6_11",
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": null,
+   "source_id": "10.1007/978-3-0348-0451-6_11",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of Chronic Myelogenous Leukaemia Stem Cells Subject to Hill-Function-Like Signaling",
+   "source": "Unpaywall",
+   "sourced_paper_id": "2123763814",
+   "venue": "Springer Proceedings in Mathematics & Statistics",
+   "journal_name": "Springer Proceedings in Mathematics & Statistics",
+   "authors": [
+    {
+     "author_info_first": "Tor",
+     "author_info_middle": null,
+     "author_info_last": "Flå",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Florian",
+     "author_info_middle": null,
+     "author_info_last": "Rupp",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Clemens",
+     "author_info_middle": null,
+     "author_info_last": "Woywod",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1511241872": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "205132f6b4cbfee9f7242cd6a2df9304f2e232a7",
+   "pdf_hash": "205132f6b4cbfee9f7242cd6a2df9304f2e232a7",
+   "title": null,
+   "source": "Anansi",
+   "sourced_paper_id": "1511241872",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "2065282174461939712": {
+   "doi": "10.1007/s00477-026-03236-9",
+   "pmid": null,
+   "block": "block",
+   "year": 2026,
+   "abstract": "This study presents a prey–predator model incorporating the dual effects of prey vigilance and harvesting under both deterministic and stochastic frameworks. In the deterministic case, the positivity, boundedness,local and global stability of equilibria are analyzed along with the occurrence of Hopf bifurcations. Numerical simulations validate the analytical results and demonstrate how vigilance and harvesting influence population dynamics and system stability for suitable parameter values of the model. Results reveal that moderate vigilance stabilizes the system, while excessive vigilance or harvesting may drive populations to extinction. A sensitivity analysis identifies the parameters exerting the strongest influence on prey and predator densities. The model is further extended to a stochastic framework by adding environmental noise to study its effect on system stability and species persistence. Environmental noise can disturb the system and may destabilize a deterministic system that is otherwise stable. The analysis reveals, as a novel finding, that excessive prey harvesting can lead to the extinction of both species, whereas excessive predator harvesting results in predator extinction, providing important insights for sustainable ecosystem management.",
+   "source_id": "10.1007/s00477-026-03236-9",
+   "pdf_hash": "edb15c35af44e299d8d4b0d4b55d670e40d5b84a",
+   "title": "Deterministic and stochastic dynamics of prey-predator models with prey vigilance and harvesting",
+   "source": "Springer",
+   "sourced_paper_id": "2065282174461939712",
+   "venue": "Stochastic Environmental Research and Risk Assessment",
+   "journal_name": "Stochastic Environmental Research and Risk Assessment",
+   "authors": [
+    {
+     "author_info_first": "Bhagwan",
+     "author_info_middle": null,
+     "author_info_last": "Kumar",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Shivani",
+     "author_info_middle": null,
+     "author_info_last": "Khare",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Bipin",
+     "author_info_middle": null,
+     "author_info_last": "Kumar",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "25819321": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "f6111bceb6b336137e2d783779ec0e99dad8c757",
+   "pdf_hash": "f6111bceb6b336137e2d783779ec0e99dad8c757",
+   "title": null,
+   "source": "Anansi",
+   "sourced_paper_id": "25819321",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "1520027870477422592": {
+   "doi": "10.1155/2022/5780719",
+   "pmid": null,
+   "block": "block",
+   "year": 2022,
+   "abstract": "In December 2019, a severe respiratory syndrome (COVID-19) caused by a new coronavirus (SARS-CoV-2) was identified in China and spread rapidly around the globe. COVID-19 was declared a pandemic by the World Health Organization (WHO) in March 2020. With eventually substantial global underestimation, more than 225 million cases were confirmed by the end of August 2021, counting more than 4.5 million deaths. COVID-19 symptoms range from mild (or no symptoms) to severe illness, with disease severity and death occurring according to a hierarchy of risks, with age and preexisting health conditions enhancing the risks of disease severity manifestation. In this paper, a mathematical model for COVID-19 transmission is proposed and analyzed. The model stratifies the studied population into two groups, older and younger. Applied to the COVID-19 outbreaks in Spain and in Italy, we find the disease-free equilibrium and the basic reproduction number for each case study. A sensitivity analysis to identify the key parameters which influence the basic reproduction number, and hence regulate the transmission dynamics of COVID-19, is also performed. Finally, the model is extended to its stochastic counterpart to encapsulate the variation or uncertainty found in the transmissibility of the disease. We observe the variability of the infectious population finding its distribution at a given time, demonstrating that for small populations, stochasticity will play an important role.",
+   "source_id": "covidwho-1799191",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of COVID-19: The Case Study of Italy and Spain",
+   "source": "WHO",
+   "sourced_paper_id": "1520027870477422592",
+   "venue": null,
+   "journal_name": "Computational and Mathematical Methods",
+   "authors": [
+    {
+     "author_info_first": "A.",
+     "author_info_middle": "K.",
+     "author_info_last": "Srivastav",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "N.",
+     "author_info_middle": null,
+     "author_info_last": "Stollenwerk",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "M.",
+     "author_info_middle": null,
+     "author_info_last": "Aguiar",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1733460440": {
+   "doi": "10.1117/12.922549",
+   "pmid": null,
+   "block": "block",
+   "year": 2012,
+   "abstract": "We present a theoretical and experimental study of the polarization-resolved nonlinear dynamics of a 1550nm single-mode linearly polarized VCSEL when subject to orthogonal optical injection. Anticorrelated (correlated) dynamics between the two linear polarizations emitted by the VCSEL is found for negative (positive) frequency detuning. Our theoretical analysis show that deterministic dynamics with appreciable values of the standard deviation of the period of the signal can be found for negative values of the frequency detuning. We study the effect of spontaneous emission noise on the dynamics by analyzing the dependence of the average and standard deviation of the interpulse time on the injected power. We find that in general the effect of spontaneous emission noise is to increase the standard deviation of the interpulse time.",
+   "source_id": "10.1117/12.922549",
+   "pdf_hash": "839ab02c75fdbe65bde372837258a26d34b107f4",
+   "title": "Deterministic and stochastic dynamics of linear polarizations emitted by single-mode VCSELs subject to orthogonal optical injection",
+   "source": "SPIE",
+   "sourced_paper_id": "1733460440",
+   "venue": "Photonics Europe",
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "P.",
+     "author_info_middle": null,
+     "author_info_last": "Pérez",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Quirce",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Valle",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "L.",
+     "author_info_middle": null,
+     "author_info_last": "Pesquera",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1396625907526930432": {
+   "doi": "10.3934/mbe.2021143",
+   "pmid": null,
+   "block": "block",
+   "year": 2021,
+   "abstract": "In this paper, a prey-predator model with modified Leslie-Gower and simplified Holling-type Ⅳ functional responses is proposed to study the dynamic behaviors. For the deterministic system, we analyze the permanence of the system and the stability of the positive equilibrium point. For the stochastic system, we not only prove the existence and uniqueness of global positive solution, but also discuss the persistence in mean and extinction of the populations. In addition, we find that stochastic system has an ergodic stationary distribution under some parameter constraints. Finally, our theoretical results are verified by numerical simulations.",
+   "source_id": "3139325064",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of a modified Leslie-Gower prey-predator system with simplified Holling-type IV scheme.",
+   "source": "MAG",
+   "sourced_paper_id": "1396625907526930432",
+   "venue": null,
+   "journal_name": "Mathematical Biosciences and Engineering",
+   "authors": [
+    {
+     "author_info_first": "Lin",
+     "author_info_middle": null,
+     "author_info_last": "Li",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Wencai",
+     "author_info_middle": null,
+     "author_info_last": "Zhao",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1627169593": {
+   "doi": "10.1007/s12591-013-0170-x",
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": "Allelopathic stimulators have some stabilizing role for the interaction between two or more competitive phytoplankton species within aquatic environment. Various models within deterministic environment are examined by several researchers to understand the role of allelo-chemicals to shape the dynamic behavior within deterministic environment. As plankton species are available within aquatic environment so they are subjected to environmental driving forces. In the present paper we have considered an existing and well established two-species competitive phytoplankton model where one species is toxic. We have revealed various interesting dynamical features of the model which were overlooked in the earlier studies. The stochastic model considered in this paper is obtained from the deterministic model by introducing multiplicative white noise terms. For the stochastic model, we have established the existence of global solution which ensures positivity and boundedness of the solution starting from an interior point of first quadrant in presence of environmental driving forces. Bounds for different order moments of solution are obtained and used to prove the stochastic boundedness of solution. The sufficient conditions for stochastic permanence are obtained and verified with the help of numerical examples. Analytical results are interpreted from ecological point of view.",
+   "source_id": "2046147944",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of a Competitive Phytoplankton Model with Allelopathy",
+   "source": "MAG",
+   "sourced_paper_id": "1627169593",
+   "venue": null,
+   "journal_name": "Differential Equations and Dynamical Systems",
+   "authors": [
+    {
+     "author_info_first": "Partha",
+     "author_info_middle": "Sarathi",
+     "author_info_last": "Mandal",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Malay",
+     "author_info_middle": null,
+     "author_info_last": "Banerjee",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1564516311772434432": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": "In December 2019, a severe respiratory syndrome (COVID-19) caused by a new coronavirus (SARS-CoV-2) was identi ﬁ ed in China and spread rapidly around the globe. COVID-19 was declared a pandemic by the World Health Organization (WHO) in March 2020. With eventually substantial global underestimation, more than 225 million cases were con ﬁ rmed by the end of August 2021, counting more than 4.5 million deaths. COVID-19 symptoms range from mild (or no symptoms) to severe illness, with disease severity and death occurring according to a hierarchy of risks, with age and preexisting health conditions enhancing the risks of disease severity manifestation. In this paper, a mathematical model for COVID-19 transmission is proposed and analyzed. The model strati ﬁ es the studied population into two groups, older and younger. Applied to the COVID-19 outbreaks in Spain and in Italy, we ﬁ nd the disease-free equilibrium and the basic reproduction number for each case study. A sensitivity analysis to identify the key parameters which in ﬂ uence the basic reproduction number, and hence regulate the transmission dynamics of COVID-19, is also performed. Finally, the model is extended to its stochastic counterpart to encapsulate the variation or uncertainty found in the transmissibility of the disease. We observe the variability of the infectious population ﬁ nding its distribution at a given time, demonstrating that for small populations, stochasticity will play an important role.",
+   "source_id": "009178c4d8f507e92ffe444a07d53620faa8e34e",
+   "pdf_hash": "009178c4d8f507e92ffe444a07d53620faa8e34e",
+   "title": "Deterministic and Stochastic Dynamics of COVID-19: The Case Study of Italy and Spain",
+   "source": "ScienceParsePlus",
+   "sourced_paper_id": "1564516311772434432",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "1386220008538902528": {
+   "doi": "10.3934/mbe.2021143",
+   "pmid": "33892573",
+   "block": "block",
+   "year": 2021,
+   "abstract": "In this paper, a prey-predator model with modified Leslie-Gower and simplified Holling-type Ⅳ functional responses is proposed to study the dynamic behaviors. For the deterministic system, we analyze the permanence of the system and the stability of the positive equilibrium point. For the stochastic system, we not only prove the existence and uniqueness of global positive solution, but also discuss the persistence in mean and extinction of the populations. In addition, we find that stochastic system has an ergodic stationary distribution under some parameter constraints. Finally, our theoretical results are verified by numerical simulations.",
+   "source_id": "33892573v1",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of a modified Leslie-Gower prey-predator system with simplified Holling-type Ⅳ scheme.",
+   "source": "Medline",
+   "sourced_paper_id": "1386220008538902528",
+   "venue": "Mathematical biosciences and engineering : MBE",
+   "journal_name": "Mathematical biosciences and engineering : MBE",
+   "authors": [
+    {
+     "author_info_first": "Lin",
+     "author_info_middle": null,
+     "author_info_last": "Li",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Wencai",
+     "author_info_middle": null,
+     "author_info_last": "Zhao",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "2014884090": {
+   "doi": "10.4203/ccp.71.7.1",
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "10.4203/ccp.71.7.1",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of Vehicle-Bridge Interaction",
+   "source": "Unpaywall",
+   "sourced_paper_id": "2014884090",
+   "venue": "Computational Civil and Structural Engineering",
+   "journal_name": "Computational Civil and Structural Engineering",
+   "authors": [
+    {
+     "author_info_first": "Q.L.",
+     "author_info_middle": null,
+     "author_info_last": "Zhang",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.C.W.M.",
+     "author_info_middle": null,
+     "author_info_last": "Vrouwenvelder",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "J.",
+     "author_info_middle": null,
+     "author_info_last": "Wardenier",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1613563833501093888": {
+   "doi": "10.1007/s12591-013-0170-x",
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": "Allelopathic stimulators have some stabilizing role for the interaction between two or more competitive phytoplankton species within aquatic environment. Various models within deterministic environment are examined by several researchers to understand the role of allelo-chemicals to shape the dynamic behavior within deterministic environment. As plankton species are available within aquatic environment so they are subjected to environmental driving forces. In the present paper we have considered an existing and well established two-species competitive phytoplankton model where one species is toxic. We have revealed various interesting dynamical features of the model which were overlooked in the earlier studies. The stochastic model considered in this paper is obtained from the deterministic model by introducing multiplicative white noise terms. For the stochastic model, we have established the existence of global solution which ensures positivity and boundedness of the solution starting from an interior point of first quadrant in presence of environmental driving forces. Bounds for different order moments of solution are obtained and used to prove the stochastic boundedness of solution. The sufficient conditions for stochastic permanence are obtained and verified with the help of numerical examples. Analytical results are interpreted from ecological point of view.",
+   "source_id": "s12591-013-0170-x",
+   "pdf_hash": "83e7b81cda9d092552db80e0410656bdefd68376",
+   "title": "Deterministic and Stochastic Dynamics of a Competitive Phytoplankton Model with Allelopathy",
+   "source": "SpringerNature",
+   "sourced_paper_id": "1613563833501093888",
+   "venue": "Differential Equations and Dynamical Systems",
+   "journal_name": "Differential Equations and Dynamical Systems",
+   "authors": [
+    {
+     "author_info_first": "Partha",
+     "author_info_middle": "Sarathi",
+     "author_info_last": "Mandal",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Malay",
+     "author_info_middle": null,
+     "author_info_last": "Banerjee",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1921950400500469760": {
+   "doi": "10.1140/epjp/s13360-025-06325-w",
+   "pmid": null,
+   "block": "block",
+   "year": 2025,
+   "abstract": null,
+   "source_id": "10.1140/epjp/s13360-025-06325-w",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of seed dispersal mutualism: a study on density-dependent mechanism",
+   "source": "Crossref",
+   "sourced_paper_id": "1921950400500469760",
+   "venue": "The European Physical Journal Plus",
+   "journal_name": "The European Physical Journal Plus",
+   "authors": [
+    {
+     "author_info_first": "Tao",
+     "author_info_middle": null,
+     "author_info_last": "Feng",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Jiayin",
+     "author_info_middle": null,
+     "author_info_last": "Zhang",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Chenbo",
+     "author_info_middle": null,
+     "author_info_last": "Liu",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "2087616657": {
+   "doi": "10.1088/0031-8949/92/1/014002",
+   "pmid": null,
+   "block": "block",
+   "year": 2016,
+   "abstract": null,
+   "source_id": "10.1088/0031-8949/92/1/014002",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration",
+   "source": "Unpaywall",
+   "sourced_paper_id": "2087616657",
+   "venue": "Physica Scripta",
+   "journal_name": "Physica Scripta",
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora C",
+     "author_info_middle": null,
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "S I",
+     "author_info_middle": null,
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1703086504588349440": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": "We present a theoretical and experimental study of the polarization-resolved nonlinear dynamics of a 1550nm singlemode linearly polarized VCSEL when subject to orthogonal optical injection. Anticorrelated (correlated) dynamics between the two linear polarizations emitted by the VCSEL is found for negative (positive) frequency detuning. Our theoretical analysis show that deterministic dynamics with appreciable values of the standard deviation of the period of the signal can be found for negative values of the frequency detuning. We study the effect of spontaneous emission noise on the dynamics by analyzing the dependence of the average and standard deviation of the interpulse time on the injected power. We find that in general the effect of spontaneous emission noise is to increase the standard deviation of the interpulse time.",
+   "source_id": "83d21b23837d0e3a66a6b08946b9a372b871e9ba",
+   "pdf_hash": "83d21b23837d0e3a66a6b08946b9a372b871e9ba",
+   "title": "Deterministic and stochastic dynamics of linear polarizations emitted by single-mode VCSELs subject to orthogonal optical injection",
+   "source": "MergedPDFExtraction",
+   "sourced_paper_id": "1703086504588349440",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "P.",
+     "author_info_middle": null,
+     "author_info_last": "Pérez",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Quirce",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Valle",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "L.",
+     "author_info_middle": null,
+     "author_info_last": "Pesquera",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "2061276060": {
+   "doi": "10.1117/12.922549",
+   "pmid": null,
+   "block": "block",
+   "year": 2012,
+   "abstract": null,
+   "source_id": "10.1117/12.922549",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of linear polarizations emitted by single-mode VCSELs subject to orthogonal optical injection",
+   "source": "Unpaywall",
+   "sourced_paper_id": "2061276060",
+   "venue": "Semiconductor Lasers and Laser Dynamics V",
+   "journal_name": "Semiconductor Lasers and Laser Dynamics V",
+   "authors": [
+    {
+     "author_info_first": "P.",
+     "author_info_middle": null,
+     "author_info_last": "Pérez",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Quirce",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Valle",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "L.",
+     "author_info_middle": null,
+     "author_info_last": "Pesquera",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1633427570": {
+   "doi": "10.1088/1402-4896/aa916c",
+   "pmid": null,
+   "block": "block",
+   "year": 2017,
+   "abstract": null,
+   "source_id": "2767083657",
+   "pdf_hash": null,
+   "title": "Corrigendum: Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration (2017 Phys. Scr. 92 014002)",
+   "source": "MAG",
+   "sourced_paper_id": "1633427570",
+   "venue": null,
+   "journal_name": "Physica Scripta",
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora",
+     "author_info_middle": "C.",
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Snezhana",
+     "author_info_middle": "I.",
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1480821327": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": null,
+   "source_id": "2762950612",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of model gene circuits",
+   "source": "MAG",
+   "sourced_paper_id": "1480821327",
+   "venue": null,
+   "journal_name": "",
+   "authors": [
+    {
+     "author_info_first": "Sayantari",
+     "author_info_middle": null,
+     "author_info_last": "Ghosh",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1613577235715854336": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": "Allelopathic stimulators have some stabilizing role for the interaction between two or more competitive phytoplankton species within aquatic environment. Various models within deterministic environment are examined by several researchers to understand the role of allelo-chemicals to shape the dynamic behavior within deterministic environment. As plankton species are available within aquatic environment so they are subjected to environmental driving forces. In the present paper we have considered an existing and well established two-species competitive phytoplankton model where one species is toxic. We have revealed various interesting dynamical features of the model which were overlooked in the earlier studies. The stochastic model considered in this paper is obtained from the deterministic model by introducing multiplicative white noise terms. For the stochastic model, we have established the existence of global solution which ensures positivity and boundedness of the solution starting from an interior point of first quadrant in presence of environmental driving forces. Bounds for different order moments of solution are obtained and used to prove the stochastic boundedness of solution. The sufficient conditions for stochastic permanence are obtained and verified with the help of numerical examples. Analytical results are interpreted from ecological point of view.",
+   "source_id": "83e7b81cda9d092552db80e0410656bdefd68376",
+   "pdf_hash": "83e7b81cda9d092552db80e0410656bdefd68376",
+   "title": "Deterministic and Stochastic Dynamics of a Competitive Phytoplankton Model with Allelopathy",
+   "source": "MergedPDFExtraction",
+   "sourced_paper_id": "1613577235715854336",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Partha",
+     "author_info_middle": "Sarathi",
+     "author_info_last": "Mandal",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Malay",
+     "author_info_middle": null,
+     "author_info_last": "Banerjee",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1973671538": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2012,
+   "abstract": null,
+   "source_id": "2fa7f72e6e9312770e87ce5c684f9219fa8548e9",
+   "pdf_hash": "2fa7f72e6e9312770e87ce5c684f9219fa8548e9",
+   "title": "Deterministic and Stochastic Dynamics of Bed Load Tracer Particles in a Coarse Grained River",
+   "source": "ScienceParseMerged",
+   "sourced_paper_id": "1973671538",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Colin",
+     "author_info_middle": "B.",
+     "author_info_last": "Phillips",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Raleigh",
+     "author_info_middle": "L.",
+     "author_info_last": "Martin",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Douglas",
+     "author_info_middle": "J.",
+     "author_info_last": "Jerolmack",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1564455757108219904": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "wayback-2022-08-29-3060",
+   "pdf_hash": "009178c4d8f507e92ffe444a07d53620faa8e34e",
+   "title": null,
+   "source": "Adhoc",
+   "sourced_paper_id": "1564455757108219904",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "1431324689241739264": {
+   "doi": "10.3934/mbe.2021143",
+   "pmid": null,
+   "block": "block",
+   "year": 2021,
+   "abstract": null,
+   "source_id": "10.3934/mbe.2021143",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of a modified Leslie-Gower prey-predator system with simplified Holling-type Ⅳ scheme",
+   "source": "Crossref",
+   "sourced_paper_id": "1431324689241739264",
+   "venue": "Mathematical Biosciences and Engineering",
+   "journal_name": "Mathematical Biosciences and Engineering",
+   "authors": [
+    {
+     "author_info_first": "Lin",
+     "author_info_middle": null,
+     "author_info_last": "Li",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Wencai",
+     "author_info_middle": null,
+     "author_info_last": "Zhao",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1550438619649413120": {
+   "doi": "10.1088/0031-8949/92/1/014002",
+   "pmid": null,
+   "block": "block",
+   "year": 2016,
+   "abstract": "Rayleigh–Taylor (RT) mixing occurs in a variety of natural and man-made phenomena in fluids, plasmas and materials, from celestial event to atoms. In many circumstances, RT flows are driven by variable acceleration, whereas majority of existing studies have considered only sustained acceleration. In this work we perform detailed analytical and numerical study of RT mixing with a power-law time-dependent acceleration. A set of deterministic nonlinear non-homogeneous ordinary differential equations and nonlinear stochastic differential equations with multiplicative noise are derived on the basis of momentum model. For a broad range of parameters, self-similar asymptotic solutions are found analytically, and their statistical properties are studied numerically. We identify two sub-regimes of RT mixing dynamics depending on the acceleration exponent—the acceleration-driven mixing and dissipation-driven mixing. Transition between the sub-regimes is studied, and it is found that each sub-regime has its own characteristic dimensionless invariant quantity.",
+   "source_id": "10.1088/0031-8949/92/1/014002",
+   "pdf_hash": "bdcbad3d95641f433add19ec6a30ecb4e5ac010e",
+   "title": "Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration",
+   "source": "IOP",
+   "sourced_paper_id": "1550438619649413120",
+   "venue": null,
+   "journal_name": "Physica Scripta",
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora",
+     "author_info_middle": "C",
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "S",
+     "author_info_middle": "I",
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1628999167": {
+   "doi": "10.1117/12.922549",
+   "pmid": null,
+   "block": "block",
+   "year": 2012,
+   "abstract": "We present a theoretical and experimental study of the polarization-resolved nonlinear dynamics of a 1550nm single-mode \nlinearly polarized VCSEL when subject to orthogonal optical injection. Anticorrelated (correlated) dynamics \nbetween the two linear polarizations emitted by the VCSEL is found for negative (positive) frequency detuning. Our \ntheoretical analysis show that deterministic dynamics with appreciable values of the standard deviation of the period of \nthe signal can be found for negative values of the frequency detuning. We study the effect of spontaneous emission noise \non the dynamics by analyzing the dependence of the average and standard deviation of the interpulse time on the injected \npower. We find that in general the effect of spontaneous emission noise is to increase the standard deviation of the \ninterpulse time.",
+   "source_id": "2067941037",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of linear polarizations emitted by single-mode VCSELs subject to orthogonal optical injection",
+   "source": "MAG",
+   "sourced_paper_id": "1628999167",
+   "venue": null,
+   "journal_name": "Proceedings of SPIE",
+   "authors": [
+    {
+     "author_info_first": "Pablo",
+     "author_info_middle": null,
+     "author_info_last": "Pérez",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Ana",
+     "author_info_middle": null,
+     "author_info_last": "Quirce",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Angel",
+     "author_info_middle": null,
+     "author_info_last": "Valle",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Luis",
+     "author_info_middle": null,
+     "author_info_last": "Pesquera",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1475644414": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2011,
+   "abstract": "xxv Chapter",
+   "source_id": "f6111bceb6b336137e2d783779ec0e99dad8c757",
+   "pdf_hash": "f6111bceb6b336137e2d783779ec0e99dad8c757",
+   "title": "Deterministic and stochastic dynamics of multivariable neuron models : resonance , filtered fluctuations and sodium-current inactivation by Azadeh",
+   "source": "ScienceParseMerged",
+   "sourced_paper_id": "1475644414",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Khajeh",
+     "author_info_middle": null,
+     "author_info_last": "Alijani",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1703122356781715456": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": "We present a theoretical and experimental study of the polarization-resolved nonlinear dynamics of a 1550nm single-mode linearly polarized VCSEL when subject to orthogonal optical injection. Anticorrelated (correlated) dynamics between the two linear polarizations emitted by the VCSEL is found for negative (positive) frequency detuning. Our theoretical analysis show that deterministic dynamics with appreciable values of the standard deviation of the period of the signal can be found for negative values of the frequency detuning. We study the effect of spontaneous emission noise on the dynamics by analyzing the dependence of the average and standard deviation of the interpulse time on the injected power. We find that in general the effect of spontaneous emission noise is to increase the standard deviation of the interpulse time.",
+   "source_id": "83d21b23837d0e3a66a6b08946b9a372b871e9ba",
+   "pdf_hash": "83d21b23837d0e3a66a6b08946b9a372b871e9ba",
+   "title": "Deterministic and stochastic dynamics of linear polarizations emitted by single-mode VCSELs subject to orthogonal optical injection",
+   "source": "ScienceParsePlus",
+   "sourced_paper_id": "1703122356781715456",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "P.",
+     "author_info_middle": null,
+     "author_info_last": "Pérez",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Quirce",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Valle",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "L.",
+     "author_info_middle": null,
+     "author_info_last": "Pesquera",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1552081489196224512": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "f4464be85a7debebfd19a6a442d1e3fd87071b1b",
+   "pdf_hash": "f4464be85a7debebfd19a6a442d1e3fd87071b1b",
+   "title": "Corrigendum: Deterministic and stochastic dynamics of Rayleigh – Taylor mixing with a power-law time-dependent acceleration ( 2017 Phys. Scr. 92 014002 )",
+   "source": "ScienceParsePlus",
+   "sourced_paper_id": "1552081489196224512",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "1550539218613178368": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2017,
+   "abstract": "The operator of direct sumÅ is commonly applied in group theory. Here we use it to illustrate that general solution equation (7a) for equation (4) is a superposition, in a broad sense, of the homogeneous solution hd and the particular solution h , a which have distinct symmetry properties. Because equation (4) is nonlinear, the solutions hd and ha in equation (7a) are in general coupled, and their superposition is a function of hd and h . a A remarkable property of equation (4) is that in the asymptotic regimes, at early times  ( ) t t t 1 0 0 and at late times  t t 1, 0 the solutions ha and hd in equation (7a) are effectively decoupled. Particularly, at early times in equation (4),  ( ) t t t 1, 0 0 by applying = + ( ) ( ) h v h v , , 0 0 ( ̃ ̃) h v , , where = ( ) h h t 0 0 and = ( ) v v t 0 0 the initial conditions, and ( ̃ ̃) h v , are small perturbations, by linearizing equation (4) for small ( ̃ ̃) h v , , and by constraining the initial conditions for small perturbations as = ̃ ( ) h t 0 0 and = ̃ ( ) v t 0, 0 we find for general solution in equation (7a): = Å » + » + =   ( ) ( ) ( ) ( )( ) b 7 h h h h h v t t v v v t t",
+   "source_id": "f4464be85a7debebfd19a6a442d1e3fd87071b1b",
+   "pdf_hash": "f4464be85a7debebfd19a6a442d1e3fd87071b1b",
+   "title": "Corrigendum: Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration (2017 Phys. Scr. 92 014002)",
+   "source": "MergedPDFExtraction",
+   "sourced_paper_id": "1550539218613178368",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora",
+     "author_info_middle": "C",
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "S",
+     "author_info_middle": "I",
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1684745652": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "205132f6b4cbfee9f7242cd6a2df9304f2e232a7",
+   "pdf_hash": "205132f6b4cbfee9f7242cd6a2df9304f2e232a7",
+   "title": "Deterministic and Stochastic Dynamics of an Eco-epidemiological Model Research",
+   "source": "ScienceParseMerged",
+   "sourced_paper_id": "1684745652",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "B.",
+     "author_info_middle": "N.",
+     "author_info_last": "Karuna",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "K.",
+     "author_info_middle": "Lakshmi",
+     "author_info_last": "Narayan",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "B.",
+     "author_info_middle": "Ravindra",
+     "author_info_last": "Reddy",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1703047897068605440": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "83d21b23837d0e3a66a6b08946b9a372b871e9ba",
+   "pdf_hash": "83d21b23837d0e3a66a6b08946b9a372b871e9ba",
+   "title": null,
+   "source": "Anansi",
+   "sourced_paper_id": "1703047897068605440",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "1983703911747293184": {
+   "doi": "10.1140/epjp/s13360-025-06325-w",
+   "pmid": null,
+   "block": "block",
+   "year": 2025,
+   "abstract": "Seed dispersal mutualism, where animals disperse seeds and plants provide nutritional rewards, is critical to maintaining biodiversity and ecosystem stability. This study develops a stochastic model to investigate how animals enhance plant survival by reducing seed density dependence, extending previous deterministic frameworks. Deterministic analysis identifies conditions for species survival, extinction, and coexistence, revealing that reduced density dependence stabilizes animal-only equilibria but is less effective in promoting coexistence compared to mechanisms that enhance seed germination. Stochastic analysis shows that moderate environmental noise significantly improves species persistence at low densities by rapidly driving the system toward coexistence, whereas intense environmental fluctuations accelerate extinction. Specifically, the model predicts extinction with probability one once noise surpasses a critical threshold. These findings highlight the dual effects of stochasticity on ecological stability and provide analytical methods broadly applicable to interdisciplinary research in physics, mathematical biology, and environmental sciences.",
+   "source_id": "10.1140/epjp/s13360-025-06325-w",
+   "pdf_hash": "0c567306c0d5d9768a7400b40dead96a401f874e",
+   "title": "Deterministic and stochastic dynamics of seed dispersal mutualism: a study on density-dependent mechanism",
+   "source": "Springer",
+   "sourced_paper_id": "1983703911747293184",
+   "venue": "The European Physical Journal Plus",
+   "journal_name": "The European Physical Journal Plus",
+   "authors": [
+    {
+     "author_info_first": "Tao",
+     "author_info_middle": null,
+     "author_info_last": "Feng",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Jiayin",
+     "author_info_middle": null,
+     "author_info_last": "Zhang",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Chenbo",
+     "author_info_middle": null,
+     "author_info_last": "Liu",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1875672867": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "2fa7f72e6e9312770e87ce5c684f9219fa8548e9",
+   "pdf_hash": "2fa7f72e6e9312770e87ce5c684f9219fa8548e9",
+   "title": null,
+   "source": "Anansi",
+   "sourced_paper_id": "1875672867",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "2100839007": {
+   "doi": "10.1007/s12591-013-0170-x",
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": null,
+   "source_id": "10.1007/s12591-013-0170-x",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of a Competitive Phytoplankton Model with Allelopathy",
+   "source": "Unpaywall",
+   "sourced_paper_id": "2100839007",
+   "venue": "Differential Equations and Dynamical Systems",
+   "journal_name": "Differential Equations and Dynamical Systems",
+   "authors": [
+    {
+     "author_info_first": "Partha Sarathi",
+     "author_info_middle": null,
+     "author_info_last": "Mandal",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Malay",
+     "author_info_middle": null,
+     "author_info_last": "Banerjee",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1657735748738093056": {
+   "doi": "10.1155/2022/5780719",
+   "pmid": null,
+   "block": "block",
+   "year": 2022,
+   "abstract": null,
+   "source_id": "journals/cmm/SrivastavSA22",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of COVID-19: The Case Study of Italy and Spain",
+   "source": "DBLP",
+   "sourced_paper_id": "1657735748738093056",
+   "venue": "Comput. Math. Methods",
+   "journal_name": "Comput. Math. Methods",
+   "authors": [
+    {
+     "author_info_first": "Akhil",
+     "author_info_middle": "Kumar",
+     "author_info_last": "Srivastav",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nico",
+     "author_info_middle": null,
+     "author_info_last": "Stollenwerk",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Maíra",
+     "author_info_middle": null,
+     "author_info_last": "Aguiar",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1633172893": {
+   "doi": "10.1088/0031-8949/92/1/014002",
+   "pmid": null,
+   "block": "block",
+   "year": 2017,
+   "abstract": null,
+   "source_id": "2558186478",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration",
+   "source": "MAG",
+   "sourced_paper_id": "1633172893",
+   "venue": null,
+   "journal_name": "Physica Scripta",
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora",
+     "author_info_middle": "C.",
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Snezhana",
+     "author_info_middle": "I.",
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1455187603434246144": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2021,
+   "abstract": "Abstract: In this paper, a prey-predator model with modified Leslie-Gower and simplified Hollingtype IV functional responses is proposed to study the dynamic behaviors. For the deterministic system, we analyze the permanence of the system and the stability of the positive equilibrium point. For the stochastic system, we not only prove the existence and uniqueness of global positive solution, but also discuss the persistence in mean and extinction of the populations. In addition, we find that stochastic system has an ergodic stationary distribution under some parameter constraints. Finally, our theoretical results are verified by numerical simulations.",
+   "source_id": "17a48a5c3746afaefcee405d266504534a63b917",
+   "pdf_hash": "17a48a5c3746afaefcee405d266504534a63b917",
+   "title": "Deterministic and stochastic dynamics of a modified Leslie-Gower prey-predator system with simplified Holling-type IV scheme",
+   "source": "MergedPDFExtraction",
+   "sourced_paper_id": "1455187603434246144",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Lin",
+     "author_info_middle": null,
+     "author_info_last": "Li",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Wencai",
+     "author_info_middle": null,
+     "author_info_last": "Zhao",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1628214268": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2012,
+   "abstract": "Neurons are the basic elements of the networks that constitute the computational \nunits of the brain. They dynamically transform input information into \nsequences of electrical pulses. To conceive the complex function of the brain, \nit is crucial to understand this transformation and identify simple neuron models \nwhich accurately reproduce the known features of biological neurons. This thesis \naddresses three different features of neurons. \nWe start by exploring the effect of subthreshold resonance on the response \nof a periodically forced neuron using a simple threshold model. The response is \nstudied in terms of an implicit one-dimensional time map that corresponds to the \nPoincar´e map of the forced system. Qualitatively distinct responses are found, \nincluding mode locking and chaos. We analytically find the stability regions of \nmode-locking solutions, and identify the transition to chaos through period-adding \nbifurcations. We show that the response becomes chaotic when the forcing frequency \nis close to the resonant frequency. \nThen we will consider an experimentally verified model with realistic spikegenerating \nmechanism and study the effect of filtered synaptic fluctuations on the \nfiring-rate response of the neuron. Using a population density method as well as an \nefficient numerical method, we find the steady-state firing rate in two limits of fast \nand slow synaptic inputs and present the linear response theory for the firing rate \nof the model in response to both time-dependent mean inputs and time-dependent \nnoise intensity. \nFinally, a novel model is introduced that incorporates threshold variability \nof neurons. We determine the modulation of the input-output properties of the \nmodel due to oscillatory inputs and in the presence of filtered synaptic fluctuations.",
+   "source_id": "2100105143",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of Multi-Variable Neuron Models: Resonance, Filtered Fluctuations and Sodium-Current Inactivation",
+   "source": "MAG",
+   "sourced_paper_id": "1628214268",
+   "venue": null,
+   "journal_name": "",
+   "authors": [
+    {
+     "author_info_first": "Azadeh",
+     "author_info_middle": "Khajeh",
+     "author_info_last": "Alijani",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1553538603": {
+   "doi": "10.1007/978-3-0348-0451-6_11",
+   "pmid": null,
+   "block": "block",
+   "year": 2013,
+   "abstract": "Based on a discrete Markovian birth-death model including regulated symmetric and asymmetric cell division, we formulate a continuous four-dimensional stochastic (ordinary) differential equation model for the dynamics of Chronic Myelogenous Leukaemia (CML) stem cells in a bone marrow niche involving signaling and competition between active stem cells. Invoking stochastic-deterministic correspondence we then investigate two deterministic subsystems: (a) the competition between active normal and wild-type CML stem cells or also between two developing leukaemic stem cell strains is represented by a two-dimensional equation system, and (b) a three-dimensional model involving both cycling and noncycling normal stem cells as well as cycling wild-type CML stem cells is defined. The four-dimensional equation system finally includes in addition one cycling CML stem cell clone of an anti-CML-drug-resistant mutant. By totally analytic means we discuss the existence and stability of the equilibria of the three systems in the deterministic small noise limit, and establish, by numerical means, connections between these classical results and the original stochastic setting. The robust, stable finite population equilibria can be interpreted as homeostatic equilibria of normal and leukaemic stem cell populations, in the case of the four-dimensional model for the scenario of treatment of the wild-type CML clone with a CML suppressing agent, e.g., imatinib, which leads to the emergence of a resistant CML strain. The four-dimensional model thus represents a common clinical picture.",
+   "source_id": "284705658",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of Chronic Myelogenous Leukaemia Stem Cells Subject to Hill-Function-Like Signaling",
+   "source": "MAG",
+   "sourced_paper_id": "1553538603",
+   "venue": null,
+   "journal_name": "",
+   "authors": [
+    {
+     "author_info_first": "Tor",
+     "author_info_middle": null,
+     "author_info_last": "Flå",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Florian",
+     "author_info_middle": null,
+     "author_info_last": "Rupp",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Clemens",
+     "author_info_middle": null,
+     "author_info_last": "Woywod",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "3737282599": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2012,
+   "abstract": null,
+   "source_id": "3007261871",
+   "pdf_hash": null,
+   "title": "Deterministic and stochastic dynamics of bed load tracer particles in a coarse grained river",
+   "source": "MAG",
+   "sourced_paper_id": "3737282599",
+   "venue": null,
+   "journal_name": "",
+   "authors": [
+    {
+     "author_info_first": "C.",
+     "author_info_middle": "B.",
+     "author_info_last": "Phillips",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Raleigh",
+     "author_info_middle": "L.",
+     "author_info_last": "Martin",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Douglas",
+     "author_info_middle": "J.",
+     "author_info_last": "Jerolmack",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1984181169389834240": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": "Seed dispersal mutualism, where animals disperse seeds and plants provide nutritional rewards, is critical to maintaining biodiversity and ecosystem stability. This study develops a stochastic model to investigate how animals enhance plant survival by reducing seed density dependence, extending previous deterministic frameworks. Deterministic analysis identiﬁes conditions for species survival, extinction, and coexistence, revealing that reduced density dependence stabilizes animal-only equilibria but is less effective in promoting coexistence compared to mechanisms that enhance seed germination. Stochastic analysis shows that moderate environmental noise signiﬁcantly improves species persistence at low densities by rapidly driving the system toward coexistence, whereas intense environmental ﬂuctuations accelerate extinction. Speciﬁcally, the model predicts extinction with probability one once noise surpasses a critical threshold. These ﬁndings highlight the dual effects of stochasticity on ecological stability and provide analytical methods broadly applicable to interdisciplinary research in physics, mathematical biology, and environmental sciences.",
+   "source_id": "0c567306c0d5d9768a7400b40dead96a401f874e",
+   "pdf_hash": "0c567306c0d5d9768a7400b40dead96a401f874e",
+   "title": "Deterministic and stochastic dynamics of seed dispersal mutualism: a study on density-dependent mechanism",
+   "source": "ScienceParsePlus",
+   "sourced_paper_id": "1984181169389834240",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Tao",
+     "author_info_middle": null,
+     "author_info_last": "Feng",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Jiayin",
+     "author_info_middle": null,
+     "author_info_last": "Zhang",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Chenbo",
+     "author_info_middle": null,
+     "author_info_last": "Liu",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1493618120143671296": {
+   "doi": "10.1155/2022/5780719",
+   "pmid": null,
+   "block": "block",
+   "year": 2022,
+   "abstract": "In December 2019, a severe respiratory syndrome (COVID-19) caused by a new coronavirus (SARS-CoV-2) was identified in China and spread rapidly around the globe. COVID-19 was declared a pandemic by the World Health Organization (WHO) in March 2020. With eventually substantial global underestimation, more than 225 million cases were confirmed by the end of August 2021, counting more than 4.5 million deaths. COVID-19 symptoms range from mild (or no symptoms) to severe illness, with disease severity and death occurring according to a hierarchy of risks, with age and preexisting health conditions enhancing the risks of disease severity manifestation. In this paper, a mathematical model for COVID-19 transmission is proposed and analyzed. The model stratifies the studied population into two groups, older and younger. Applied to the COVID-19 outbreaks in Spain and in Italy, we find the disease-free equilibrium and the basic reproduction number for each case study. A sensitivity analysis to identify the key parameters which influence the basic reproduction number, and hence regulate the transmission dynamics of COVID-19, is also performed. Finally, the model is extended to its stochastic counterpart to encapsulate the variation or uncertainty found in the transmissibility of the disease. We observe the variability of the infectious population finding its distribution at a given time, demonstrating that for small populations, stochasticity will play an important role.",
+   "source_id": "10.1155/2022/5780719",
+   "pdf_hash": null,
+   "title": "Deterministic and Stochastic Dynamics of COVID-19: The Case Study of Italy and Spain",
+   "source": "Crossref",
+   "sourced_paper_id": "1493618120143671296",
+   "venue": "Computational and Mathematical Methods",
+   "journal_name": "Computational and Mathematical Methods",
+   "authors": [
+    {
+     "author_info_first": "Akhil",
+     "author_info_middle": "Kumar",
+     "author_info_last": "Srivastav",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nico",
+     "author_info_middle": null,
+     "author_info_last": "Stollenwerk",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Maíra",
+     "author_info_middle": null,
+     "author_info_last": "Aguiar",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1553176724252921856": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": "Rayleigh – Taylor ( RT ) mixing occurs in a variety of natural and man-made phenomena in ﬂ uids, plasmas and materials, from celestial event to atoms. In many circumstances, RT ﬂ ows are driven by variable acceleration, whereas majority of existing studies have considered only sustained acceleration. In this work we perform detailed analytical and numerical study of RT mixing with a power-law time-dependent acceleration. A set of deterministic nonlinear non-homogeneous ordinary differential equations and nonlinear stochastic differential equations with multiplicative noise are derived on the basis of momentum model. For a broad range of parameters, self-similar asymptotic solutions are found analytically, and their statistical properties are studied numerically. We identify two sub-regimes of RT mixing dynamics depending on the acceleration exponent — the acceleration-driven mixing and dissipation-driven mixing. Transition between the sub-regimes is studied, and it is found that each sub-regime has its own characteristic dimensionless invariant quantity.",
+   "source_id": "bdcbad3d95641f433add19ec6a30ecb4e5ac010e",
+   "pdf_hash": "bdcbad3d95641f433add19ec6a30ecb4e5ac010e",
+   "title": "Corrigendum: Deterministic and stochastic dynamics of Rayleigh – Taylor mixing with a power-law time-dependent acceleration ( 2017 Phys. Scr. 92 014002 )",
+   "source": "ScienceParsePlus",
+   "sourced_paper_id": "1553176724252921856",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "1550816263591170048": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2016,
+   "abstract": "Rayleigh–Taylor (RT) mixing occurs in a variety of natural and man-made phenomena in fluids, plasmas and materials, from celestial event to atoms. In many circumstances, RT flows are driven by variable acceleration, whereas majority of existing studies have considered only sustained acceleration. In this work we perform detailed analytical and numerical study of RT mixing with a power-law time-dependent acceleration. A set of deterministic nonlinear nonhomogeneous ordinary differential equations and nonlinear stochastic differential equations with multiplicative noise are derived on the basis of momentum model. For a broad range of parameters, self-similar asymptotic solutions are found analytically, and their statistical properties are studied numerically. We identify two sub-regimes of RT mixing dynamics depending on the acceleration exponent—the acceleration-driven mixing and dissipation-driven mixing. Transition between the sub-regimes is studied, and it is found that each sub-regime has its own characteristic dimensionless invariant quantity.",
+   "source_id": "bdcbad3d95641f433add19ec6a30ecb4e5ac010e",
+   "pdf_hash": "bdcbad3d95641f433add19ec6a30ecb4e5ac010e",
+   "title": "Corrigendum: Deterministic and stochastic dynamics of Rayleigh–Taylor mixing with a power-law time-dependent acceleration (2017 Phys. Scr. 92 014002)",
+   "source": "MergedPDFExtraction",
+   "sourced_paper_id": "1550816263591170048",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Arun",
+     "author_info_middle": null,
+     "author_info_last": "Pandian",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nora",
+     "author_info_middle": "C",
+     "author_info_last": "Swisher",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "S",
+     "author_info_middle": "I",
+     "author_info_last": "Abarzhi",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1455167572851822592": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": null,
+   "abstract": null,
+   "source_id": "17a48a5c3746afaefcee405d266504534a63b917",
+   "pdf_hash": "17a48a5c3746afaefcee405d266504534a63b917",
+   "title": null,
+   "source": "Anansi",
+   "sourced_paper_id": "1455167572851822592",
+   "venue": null,
+   "journal_name": null,
+   "authors": []
+  },
+  "1748271326": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2012,
+   "abstract": "We present a theoretical and experimental study of the polarization-resolved nonlinear dynamics of a 1550nm singlemode linearly polarized VCSEL when subject to orthogonal optical injection. Anticorrelated (correlated) dynamics between the two linear polarizations emitted by the VCSEL is found for negative (positive) frequency detuning. Our theoretical analysis show that deterministic dynamics with appreciable values of the standard deviation of the period of the signal can be found for negative values of the frequency detuning. We study the effect of spontaneous emission noise on the dynamics by analyzing the dependence of the average and standard deviation of the interpulse time on the injected power. We find that in general the effect of spontaneous emission noise is to increase the standard deviation of the interpulse time.",
+   "source_id": "839ab02c75fdbe65bde372837258a26d34b107f4",
+   "pdf_hash": "839ab02c75fdbe65bde372837258a26d34b107f4",
+   "title": "Deterministic and stochastic dynamics of linear polarizations emitted by single-mode VCSELs subject to orthogonal optical injection",
+   "source": "ScienceParseMerged",
+   "sourced_paper_id": "1748271326",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "P.",
+     "author_info_middle": null,
+     "author_info_last": "Pérez",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Quirce",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "A.",
+     "author_info_middle": null,
+     "author_info_last": "Valle",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "L.",
+     "author_info_middle": null,
+     "author_info_last": "Pesquera",
+     "author_info_suffix": null
+    }
+   ]
+  },
+  "1564524347412975616": {
+   "doi": null,
+   "pmid": null,
+   "block": "block",
+   "year": 2022,
+   "abstract": "In December 2019, a severe respiratory syndrome (COVID-19) caused by a new coronavirus (SARS-CoV-2) was identified in China and spread rapidly around the globe. COVID-19 was declared a pandemic by the World Health Organization (WHO) in March 2020. With eventually substantial global underestimation, more than 225 million cases were confirmed by the end of August 2021, counting more than 4.5 million deaths. COVID-19 symptoms range from mild (or no symptoms) to severe illness, with disease severity and death occurring according to a hierarchy of risks, with age and preexisting health conditions enhancing the risks of disease severity manifestation. In this paper, a mathematical model for COVID-19 transmission is proposed and analyzed. The model stratifies the studied population into two groups, older and younger. Applied to the COVID-19 outbreaks in Spain and in Italy, we find the disease-free equilibrium and the basic reproduction number for each case study. A sensitivity analysis to identify the key parameters which influence the basic reproduction number, and hence regulate the transmission dynamics of COVID-19, is also performed. Finally, the model is extended to its stochastic counterpart to encapsulate the variation or uncertainty found in the transmissibility of the disease. We observe the variability of the infectious population finding its distribution at a given time, demonstrating that for small populations, stochasticity will play an important role.",
+   "source_id": "009178c4d8f507e92ffe444a07d53620faa8e34e",
+   "pdf_hash": "009178c4d8f507e92ffe444a07d53620faa8e34e",
+   "title": "Deterministic and Stochastic Dynamics of COVID-19: The Case Study of Italy and Spain",
+   "source": "MergedPDFExtraction",
+   "sourced_paper_id": "1564524347412975616",
+   "venue": null,
+   "journal_name": null,
+   "authors": [
+    {
+     "author_info_first": "Akhil",
+     "author_info_middle": "Kumar",
+     "author_info_last": "Srivastav",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Nico",
+     "author_info_middle": null,
+     "author_info_last": "Stollenwerk",
+     "author_info_suffix": null
+    },
+    {
+     "author_info_first": "Maíra",
+     "author_info_middle": null,
+     "author_info_last": "Aguiar",
+     "author_info_suffix": null
+    }
+   ]
+  }
  }
 }
