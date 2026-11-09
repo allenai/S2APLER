@@ -122,9 +122,17 @@ def test_distances_match_the_per_pair_path(use_constraints, incremental, batch_s
         batch_size=batch_size,
     )
     blocks = dataset.get_blocks()
-    papers = blocks["b1"]
+    papers, others = blocks["b1"], blocks["b2"]
     # Both orders of one pair, with different values: the pair given in block order wins.
-    partial = {(papers[3], papers[9]): 0.3, (papers[9], papers[3]): 0.7, (papers[12], papers[4]): 1, ("x", "y"): 0}
+    # Pairs across blocks and unknown papers are ignored.
+    partial = {
+        (papers[3], papers[9]): 0.3,
+        (papers[9], papers[3]): 0.7,
+        (papers[12], papers[4]): 1,
+        (others[5], others[1]): 0.25,
+        (papers[0], others[0]): 0,
+        ("x", "y"): 0,
+    }
     for supervision in ({}, partial):
         actual = clusterer.make_distance_matrices(blocks, dataset, supervision, True, incremental)
         expected = reference_distances(clusterer, blocks, dataset, supervision, incremental)
@@ -152,3 +160,20 @@ def test_small_inputs_preprocess_without_a_process_pool(monkeypatch):
     monkeypatch.setattr(data.multiprocessing, "Pool", no_pool)
     dataset = PDData("tests/test_dataset/papers.json", name="test_dataset", mode="inference", n_jobs=8)
     assert len(dataset.papers) < data.PREPROCESS_POOL_MIN_PAPERS
+
+
+def test_nan_ids_never_count_as_equal():
+    import json
+
+    from s2apler.text import PUBLISHER_SOURCES
+
+    source = sorted(PUBLISHER_SOURCES)[0]
+    # json.loads returns one shared NaN object; get_constraint still finds nan != nan.
+    papers = json.loads(
+        '{"1": {"title": "t", "authors": [], "block": "b", "source": "%s", "source_id": NaN},'
+        ' "2": {"title": "t", "authors": [], "block": "b", "source": "%s", "source_id": NaN}}' % (source, source)
+    )
+    dataset = PDData(papers, name="nan", mode="inference")
+    left, right, _ = next(_condensed_pair_chunks(2, 10))
+    values = dataset.constraint_values(["1", "2"], left, right)
+    assert values[0] == dataset.get_constraint("1", "2")

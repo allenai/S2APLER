@@ -114,13 +114,22 @@ def normalize_doi(doi: Optional[str]) -> Optional[str]:
 
 
 def _codes(values: List[Any]) -> np.ndarray:
-    """Integer codes for hashable values, equal codes for equal values; None becomes -1."""
+    """Integer codes for hashable values, equal codes for equal values; None becomes -1.
+
+    A value unequal to itself, such as NaN, gets a code of its own, as == and != treat it.
+    A dict would match one NaN object to itself by identity.
+    """
     table: Dict[Any, int] = {}
-    return np.fromiter(
-        (-1 if value is None else table.setdefault(value, len(table)) for value in values),
-        dtype=np.int64,
-        count=len(values),
-    )
+
+    def code(value: Any) -> int:
+        if value is None:
+            return -1
+        if value != value:
+            table[object()] = len(table)
+            return len(table) - 1
+        return table.setdefault(value, len(table))
+
+    return np.fromiter((code(value) for value in values), dtype=np.int64, count=len(values))
 
 
 def condensed_offsets(i: np.ndarray, j: np.ndarray, n: int) -> np.ndarray:
@@ -478,6 +487,70 @@ class PDData:
         else:
             return None
 
+    def block_pair_rules(self, paper_ids: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+        """Finds the pairs of one block that constraint rules match by index, not by array.
+
+        Both rules match few pairs, so constraint_values looks them up here once per block
+        instead of once per chunk of pairs.
+
+        Parameters
+        ----------
+        paper_ids: List[str]
+            the block's paper ids
+
+        Returns
+        -------
+        np.ndarray: condensed offsets of pairs with the same source URI and title, whose
+            strong signals agree
+        np.ndarray: condensed offsets of pairs the cluster seeds disallow
+        """
+        papers = [self.papers[str(paper_id)] for paper_id in paper_ids]
+        n = len(papers)
+
+        def offsets(pairs: List[Tuple[int, int]]) -> np.ndarray:
+            if not pairs:
+                return np.array([], dtype=np.int64)
+            i, j = np.array(pairs, dtype=np.int64).T
+            return condensed_offsets(np.minimum(i, j), np.maximum(i, j), n)
+
+        by_uri_and_title = defaultdict(list)
+        for position, paper in enumerate(papers):
+            if paper.source_uris and paper.title:
+                for uri in set(paper.source_uris):
+                    by_uri_and_title[(uri, paper.title)].append(position)
+        candidates = {
+            (members[a], members[b])
+            for members in by_uri_and_title.values()
+            for a in range(len(members))
+            for b in range(a + 1, len(members))
+        }
+        same_uri_and_title = [
+            (i, j) for i, j in sorted(candidates) if not _strong_signals_disagree(papers[i], papers[j])
+        ]
+
+        position = {paper_id: k for k, paper_id in enumerate(paper_ids)}
+        partners = self._disallow_partners()
+        disallowed = [
+            (position[paper_id], position[partner])
+            for paper_id in paper_ids
+            for partner in partners.get(paper_id, ())
+            if partner in position and partner != paper_id
+        ]
+        return offsets(same_uri_and_title), offsets(disallowed)
+
+    def _disallow_partners(self) -> Dict[str, Set[str]]:
+        """Each paper's disallowed partners, rebuilt only when the seed set changes."""
+        key = (id(self.cluster_seeds_disallow), len(self.cluster_seeds_disallow))
+        cached = getattr(self, "_disallow_partners_cache", None)
+        if cached is None or cached[0] != key:
+            partners: Dict[str, Set[str]] = defaultdict(set)
+            for paper_a, paper_b in self.cluster_seeds_disallow:
+                partners[paper_a].add(paper_b)
+                partners[paper_b].add(paper_a)
+            cached = (key, dict(partners))
+            self._disallow_partners_cache = cached
+        return cached[1]
+
     def constraint_values(
         self,
         paper_ids: List[str],
@@ -486,6 +559,7 @@ class PDData:
         first_offset: int = 0,
         dont_merge_cluster_seeds: bool = True,
         incremental_dont_use_cluster_seeds: bool = False,
+        pair_rules: Optional[Tuple[np.ndarray, np.ndarray]] = None,
     ) -> np.ndarray:
         """Applies get_constraint to many pairs of one block at once.
 
@@ -508,21 +582,20 @@ class PDData:
             as for get_constraint
         incremental_dont_use_cluster_seeds: bool
             as for get_constraint
+        pair_rules: Tuple[np.ndarray, np.ndarray]
+            block_pair_rules(paper_ids), when the caller already has it for this block
 
         Returns
         -------
         np.ndarray: the constraint value of each pair, NaN where get_constraint returns None
         """
         papers = [self.papers[str(paper_id)] for paper_id in paper_ids]
-        n = len(papers)
         values = np.full(len(left), np.nan)
+        same_uri_and_title, disallowed = self.block_pair_rules(paper_ids) if pair_rules is None else pair_rules
 
-        def fill_pairs(pairs: List[Tuple[int, int]], value: float):
+        def fill_offsets(offsets: np.ndarray, value: float):
             # Rules that match few pairs are found by index, then placed by condensed offset.
-            if not pairs:
-                return
-            i, j = np.array(pairs).T
-            offsets = condensed_offsets(np.minimum(i, j), np.maximum(i, j), n) - first_offset
+            offsets = offsets - first_offset
             values[offsets[(offsets >= 0) & (offsets < len(values))]] = value
 
         source = _codes([paper.source for paper in papers])
@@ -537,22 +610,8 @@ class PDData:
         )
         values[same] = CLUSTER_SEEDS_LOOKUP["disallow"]
 
-        # Same source URI and the same title: candidates come from a (URI, title) index.
-        by_uri_and_title = defaultdict(list)
-        for position, paper in enumerate(papers):
-            if paper.source_uris and paper.title:
-                for uri in set(paper.source_uris):
-                    by_uri_and_title[(uri, paper.title)].append(position)
-        candidates = {
-            (members[a], members[b])
-            for members in by_uri_and_title.values()
-            for a in range(len(members))
-            for b in range(a + 1, len(members))
-        }
-        fill_pairs(
-            [(i, j) for i, j in sorted(candidates) if not _strong_signals_disagree(papers[i], papers[j])],
-            CLUSTER_SEEDS_LOOKUP["require"],
-        )
+        # Same source URI and the same title.
+        fill_offsets(same_uri_and_title, CLUSTER_SEEDS_LOOKUP["require"])
 
         pdf_hash = _codes(
             [paper.pdf_hash if paper.pdf_hash not in self.multi_doi_pdf_hashes else None for paper in papers]
@@ -567,15 +626,7 @@ class PDData:
         if not incremental_dont_use_cluster_seeds:
             values[both_seeded & (seed[left] == seed[right])] = CLUSTER_SEEDS_LOOKUP["require"]
 
-        position = {paper_id: k for k, paper_id in enumerate(paper_ids)}
-        fill_pairs(
-            [
-                (position[a], position[b])
-                for a, b in self.cluster_seeds_disallow
-                if a in position and b in position and a != b
-            ],
-            CLUSTER_SEEDS_LOOKUP["disallow"],
-        )
+        fill_offsets(disallowed, CLUSTER_SEEDS_LOOKUP["disallow"])
         return values
 
     def get_blocks(self) -> Dict[str, List[str]]:

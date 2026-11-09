@@ -130,6 +130,46 @@ def _join_clusters_by_ids(
     return joined
 
 
+def _supervision_by_block(
+    block_dict: Dict[str, List[str]], partial_supervision: Dict[Tuple[str, str], Union[int, float]]
+) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+    """Places partial supervision into blocks once, as condensed offsets and values.
+
+    distance_matrix_helper checks a pair in block order before the reverse order, so an entry
+    given in block order wins over one given in reverse.
+
+    Parameters
+    ----------
+    block_dict: Dict
+        block key to paper ids
+    partial_supervision: Dict
+        (paper id, paper id) to the value to use for that pair
+
+    Returns
+    -------
+    Dict: block key to (offsets, values) for the blocks with any supervised pair
+    """
+    if not partial_supervision:
+        return {}
+    places: Dict[str, List[Tuple[str, int]]] = defaultdict(list)
+    for block_key, papers in block_dict.items():
+        for k, paper_id in enumerate(papers):
+            places[paper_id].append((block_key, k))
+    found: Dict[str, Dict[int, Union[int, float]]] = defaultdict(dict)
+    for in_block_order in (False, True):
+        for (paper_a, paper_b), value in partial_supervision.items():
+            for block_key, i in places.get(paper_a, ()):
+                for other_key, j in places.get(paper_b, ()):
+                    if other_key != block_key or i == j or (i < j) != in_block_order:
+                        continue
+                    n = len(block_dict[block_key])
+                    found[block_key][int(condensed_offsets(np.array(min(i, j)), np.array(max(i, j)), n))] = value
+    return {
+        block_key: (np.fromiter(entries, dtype=np.int64), np.array(list(entries.values()), dtype=float))
+        for block_key, entries in found.items()
+    }
+
+
 def _condensed_pair_chunks(n: int, max_pairs: int):
     """Yields an n-paper block's pairs in condensed order, a few rows of the matrix at a time.
 
@@ -384,6 +424,7 @@ class Clusterer:
                 start += len(offsets)
             pending, pending_count = [], 0
 
+        supervision = _supervision_by_block(block_dict, partial_supervision)
         distance_matrices = {}
         for block_key, papers in tqdm(block_dict.items(), desc="Making distance matrices", disable=disable_tqdm):
             n = len(papers)
@@ -391,6 +432,7 @@ class Clusterer:
             distances = np.zeros(n * (n - 1) // 2, dtype=np.float16)
             distance_matrices[block_key] = distances
             block_positions = np.array([position[paper_id] for paper_id in papers], dtype=np.uint32)
+            pair_rules = dataset.block_pair_rules(papers) if self.use_default_constraints_as_supervision else None
             for left, right, first_offset in _condensed_pair_chunks(n, self.batch_size):
                 labels = self._pair_labels(
                     papers,
@@ -398,8 +440,9 @@ class Clusterer:
                     right,
                     first_offset,
                     dataset,
-                    partial_supervision,
+                    supervision.get(block_key),
                     incremental_dont_use_cluster_seeds,
+                    pair_rules,
                 )
                 offsets = np.arange(first_offset, first_offset + len(left))
                 fixed = ~np.isnan(labels)
@@ -426,8 +469,9 @@ class Clusterer:
         right: np.ndarray,
         first_offset: int,
         dataset: PDData,
-        partial_supervision: Dict[Tuple[str, str], Union[int, float]],
+        supervision: Optional[Tuple[np.ndarray, np.ndarray]],
         incremental_dont_use_cluster_seeds: bool,
+        pair_rules: Optional[Tuple[np.ndarray, np.ndarray]],
     ) -> np.ndarray:
         """Labels for pairs of one block, as distance_matrix_helper gives them, without its offset.
 
@@ -443,10 +487,12 @@ class Clusterer:
             the condensed offset of the first pair
         dataset: PDData
             the dataset
-        partial_supervision: Dict
-            the dictionary of partial supervision provided with this dataset/these blocks
+        supervision: Tuple[np.ndarray, np.ndarray]
+            the block's partial supervision from _supervision_by_block, or None
         incremental_dont_use_cluster_seeds: bool
             whether to ignore the dataset's cluster seeds
+        pair_rules: Tuple[np.ndarray, np.ndarray]
+            dataset.block_pair_rules for the block
 
         Returns
         -------
@@ -460,21 +506,15 @@ class Clusterer:
                 first_offset,
                 dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
                 incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
+                pair_rules=pair_rules,
             )
         else:
             labels = np.full(len(left), np.nan)
-        if partial_supervision:
-            n = len(papers)
-            position = {paper_id: k for k, paper_id in enumerate(papers)}
-            # Partial supervision overrides constraints; a pair given in block order wins.
-            for reverse in (True, False):
-                for (paper_a, paper_b), value in partial_supervision.items():
-                    i, j = position.get(paper_a), position.get(paper_b)
-                    if i is None or j is None or i == j or (i > j) != reverse:
-                        continue
-                    offset = int(condensed_offsets(np.array(min(i, j)), np.array(max(i, j)), n)) - first_offset
-                    if 0 <= offset < len(labels):
-                        labels[offset] = value
+        if supervision is not None:
+            # Partial supervision overrides constraints.
+            offsets, values = supervision
+            in_chunk = (offsets >= first_offset) & (offsets < first_offset + len(labels))
+            labels[offsets[in_chunk] - first_offset] = values[in_chunk]
         return labels
 
     def fit(
