@@ -1,5 +1,4 @@
 import unittest
-import pytest
 
 from s2apler.consts import CLUSTER_SEEDS_LOOKUP
 from s2apler.data import PDData

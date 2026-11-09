@@ -1,17 +1,11 @@
-from typing import List, Union, Optional, Set, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from s2apler.data import NameCounts
+from typing import List, Optional, Set
 
 import re
 import string
 from itertools import zip_longest
-import warnings
 import numpy as np
 import pandas as pd
 import logging
-from numpy import inner
-from numpy.linalg import norm
 from collections import Counter
 from pylatexenc.latex2text import LatexNodes2Text
 from text_unidecode import unidecode
@@ -236,37 +230,6 @@ STOPWORDS = set(
     ]
 )
 
-AFFILIATIONS_STOP_WORDS = STOPWORDS.union(
-    {
-        "university",
-        "college",
-        "lab",
-        "organization",
-        "department",
-        "research",
-        "institute",
-        "school",
-        "academy",
-        "national",
-        "laboratory",
-    }
-)
-
-VENUE_STOP_WORDS = STOPWORDS.union(
-    {
-        "proceedings",
-        "journal",
-        "conference",
-        "transactions",
-        "international",
-        "society",
-        "letters",
-        "official",
-        "research",
-        "association",
-    }
-)
-
 NAME_PREFIXES = {
     "dr",
     "prof",
@@ -361,6 +324,40 @@ SPECIAL_PUBLICATION_WORDS = {
     "commentary",
     "retracted",
 }
+
+
+# Correction notices: "Correction to: X", "Erratum", "Publisher Correction: X", "Retraction note: X".
+# A notice shares the corrected paper's title, authors and venue, yet is a separate work
+# (allenai/scholar#42255). "Retracted:" and "Notice of Retraction:" are left out: publishers prefix
+# the retracted article's own title with them. "Correction of X" is an article title.
+_NOTICE_PREFIX = r"^(?:(?:publisher|author|authors) )?"
+_NOT_ARTICLE_OF = r"(?!(?: of)(?: |$))(?: |$)"
+CORRECTION_NOTICE = re.compile(
+    _NOTICE_PREFIX
+    + r"(?:corrigendum|corrigenda|erratum|errata|correction|corrections|addendum|retraction|expression of concern)"
+    + _NOT_ARTICLE_OF
+)
+# Correction-family notices whose identifiers are their own. Records sharing such a notice's DOI
+# or PMID are copies of the notice. Retraction and expression-of-concern titles are left out:
+# about one in five such records carries the retracted article's own DOI.
+_CORRECTION_FAMILY = re.compile(
+    _NOTICE_PREFIX + r"(?:corrigendum|corrigenda|erratum|errata|correction|corrections|addendum)" + _NOT_ARTICLE_OF
+)
+
+
+def is_correction_notice(title: Optional[str]) -> bool:
+    """Whether a normalized title is a correction notice's; see CORRECTION_NOTICE."""
+    return bool(title) and CORRECTION_NOTICE.match(title) is not None
+
+
+def marks_notice_identifiers(title: Optional[str]) -> bool:
+    """Whether a normalized title shows its record's DOI and PMID belong to a correction notice.
+
+    Only correction-family titles that also name the corrected work ("Correction: X") qualify.
+    A bare "Correction" names nothing, and such records sometimes carry the article's own DOI.
+    """
+    match = _CORRECTION_FAMILY.match(title or "")
+    return match is not None and len((title or "").split()) > len(match.group(0).split())
 
 
 # regex to check if a string is a year
@@ -493,8 +490,8 @@ def normalize_text(text: Optional[str], special_case_apostrophes_and_dashes: boo
     return norm_text
 
 
-def normalize_venue_name(s: str) -> str:
-    if pd.isnull(s) or len(s) == 0:
+def normalize_venue_name(s: Optional[str]) -> str:
+    if s is None or pd.isnull(s) or len(s) == 0:
         return ""
 
     s = unidecode(s)  # Remove diacritics
@@ -513,8 +510,8 @@ def normalize_venue_name(s: str) -> str:
 
 
 def name_text_features(
-    name_1: str,
-    name_2: str,
+    name_1: Optional[str],
+    name_2: Optional[str],
     default_val: float = NUMPY_NAN,
 ) -> List[float]:
     """
@@ -543,29 +540,6 @@ def name_text_features(
             score = score / max(len(name_1), len(name_2))
         scores.append(score)
     return scores
-
-
-def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
-    """
-    Computes the cosine similarity between two vectors
-
-    Parameters
-    ----------
-    a: np.ndarray
-        the first vector
-    b: np.ndarray
-        the second vector
-
-    Returns
-    -------
-    float: the cosine similarity of the two vectors
-    """
-    a_norm = norm(a)
-    b_norm = norm(b)
-    if a_norm == 0 or b_norm == 0:
-        return 0
-    else:
-        return inner(a, b) / (a_norm * b_norm)
 
 
 def get_text_ngrams(
@@ -597,13 +571,13 @@ def get_text_ngrams(
     if stopwords is not None:
         text = " ".join([word for word in text.split(" ") if word not in stopwords])
 
-    unigrams = []  # type: ignore
+    unigrams = []
     if use_unigrams:
-        unigrams = filter(lambda x: " " not in x, text)  # type: ignore
+        unigrams = filter(lambda x: " " not in x, text)
 
-    bigrams = []  # type: ignore
+    bigrams = []
     if use_bigrams:
-        bigrams = map(  # type: ignore
+        bigrams = map(
             lambda x: "".join(x),
             filter(lambda x: " " not in x, zip(text, text[1:])),
         )
@@ -655,104 +629,6 @@ def get_text_ngrams_words(text: Optional[str], stopwords: Optional[Set[str]] = S
     return ngrams
 
 
-def equal(
-    name_1: Optional[str],
-    name_2: Optional[str],
-    default_val: float = NUMPY_NAN,
-) -> Union[int, float]:
-    """
-    Check if two names are exactly equal after lowercasing
-
-    Parameters
-    ----------
-    name_1: string
-        the first name
-    name_2: string
-        the second name
-    default_val: float
-        the default value to return when one or both of the names is empty
-
-    Returns
-    -------
-    int: 0 (if unequal) or 1 (if equal)
-    """
-    if name_1 is None or name_2 is None or len(name_1) == 0 or len(name_2) == 0:
-        return default_val
-
-    if name_1 == "-" or name_2 == "-":
-        return default_val
-
-    if name_1.lower().strip() == name_2.lower().strip():
-        return 1
-    else:
-        return 0
-
-
-def equal_middle(
-    name_1: Optional[str],
-    name_2: Optional[str],
-    default_val: float = NUMPY_NAN,
-) -> Union[int, float]:
-    """
-    Checks if two middle names are equal. If either middle name is just an initial,
-    just check euqality of initials
-
-    Parameters
-    ----------
-    name_1: string
-        first middle name string
-    name_2: string
-        second middle name string
-    default_val: float
-        the default value to return when one or both of the names is empty
-
-    Returns
-    -------
-    int: 0 (if unequal) or 1 (if equal)
-    """
-    if name_1 is None or name_2 is None or len(name_1) == 0 or len(name_2) == 0:
-        return default_val
-
-    if len(name_1) == 1 or len(name_2) == 1:
-        if name_1[0] == name_2[0]:
-            return 1
-
-    elif name_1 == name_2:
-        return 1
-
-    return 0
-
-
-def equal_initial(
-    name_1: Optional[str],
-    name_2: Optional[str],
-    default_val: float = NUMPY_NAN,
-) -> Union[int, float]:
-    """
-    Checks if two initials are qual
-
-    Parameters
-    ----------
-    name_1: string
-        first initial
-    name_2: string
-        second initial
-    default_val: float
-        the default value to return when one or both of the names is empty
-
-    Returns
-    -------
-    int: 0 (if unequal) or 1 (if equal)
-    """
-    if name_1 is None or name_2 is None or len(name_1) == 0 or len(name_2) == 0:
-        return default_val
-
-    if name_1.strip().lower()[0] == name_2.strip().lower()[0]:
-        return 1
-    else:
-        return 0
-
-
 def counter_jaccard(
     counter_1: Counter,
     counter_2: Counter,
@@ -784,34 +660,6 @@ def counter_jaccard(
     return min(score, 1)
 
 
-def jaccard(
-    set_1: Set,
-    set_2: Set,
-    default_val: float = NUMPY_NAN,
-) -> float:
-    """
-    Computes jaccard overlap between two sets
-
-    Parameters
-    ----------
-    set_1: Set
-        first Set
-    set_2: Set
-        second Set
-    default_val: float
-        the default value to return when one or both of the Sets is empty
-
-    Returns
-    -------
-    float: the jaccard overlap
-    """
-    if len(set_1) == 0 or len(set_2) == 0:
-        return default_val
-
-    score = len(set_1.intersection(set_2)) / (len(set_1.union(set_2)))
-    return score
-
-
 def diff(value_1: Optional[float], value_2: Optional[float], default_val: float = NUMPY_NAN) -> float:
     """
     Compute absolute difference between two values.
@@ -833,34 +681,3 @@ def diff(value_1: Optional[float], value_2: Optional[float], default_val: float 
         return default_val
 
     return abs(float(value_1) - float(value_2))
-
-
-def name_counts(
-    counts_1: "NameCounts",
-    counts_2: "NameCounts",
-) -> List[Union[int, float]]:
-    """
-    Gets name counts for first, last, and first_last names.
-    These counts were computed from the entire S2 corpus.
-
-    Parameters
-    ----------
-    counts_1: NameCounts
-        first NameCounts
-    counts_2: NameCounts
-        second NameCounts
-
-    Returns
-    -------
-    List[int]: min/max for first, first_last, and min for last, last_first_initial
-    """
-    counts = []
-    counts.append([counts_1.first, counts_1.first_last, counts_1.last, counts_1.last_first_initial])  # can be nan
-    counts.append([counts_2.first, counts_2.first_last, counts_2.last, counts_2.last_first_initial])  # can be nan
-    # using nanmin so as to catch the min of counts, but regular max to propagate the nan
-    with warnings.catch_warnings():
-        # np.max of 2 nans causes annoying warnings
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        counts_min_max = list(np.nanmin(counts, axis=0)) + list(np.max([counts[0][:2], counts[1][:2]], axis=0))
-
-    return counts_min_max

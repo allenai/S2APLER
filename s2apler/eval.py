@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Any, List, Tuple, TYPE_CHECKING, Union
+from typing import Dict, Optional, Any, List, Tuple, TYPE_CHECKING
 
 import logging
 
@@ -10,7 +10,6 @@ from s2apler.consts import ORPHAN_CLUSTER_KEY
 
 import os
 from os.path import join
-from collections import defaultdict
 
 import numpy as np
 import shap
@@ -21,8 +20,6 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import precision_recall_curve
-from sklearn.calibration import CalibratedClassifierCV
-import copy
 
 
 logger = logging.getLogger("s2apler")
@@ -95,191 +92,39 @@ def cluster_eval(
     return metrics, b3_metrics_per_paper
 
 
-def incremental_cluster_eval(
-    dataset: "PDData", clusterer: "Clusterer", split: str = "test"
-) -> Tuple[Dict[str, Tuple[float, float, float]], Dict[str, Tuple[float, float, float]]]:
-    """
-    Performs clusterwise evaluation for the incremental clustering setting.
-    This includes both time-split and random split of papers.
-    Returns B3, Cluster F1, and Cluster Macro F1.
+def _positive_class_shap_values(model: Any, X: Optional[np.ndarray]) -> np.ndarray:
+    """Returns SHAP values for class 1 of a binary tree model, shaped (n_samples, n_features).
+
+    shap 0.41 returned one array per class. shap 0.51 returns a single array for binary
+    LightGBM models and an (n_samples, n_features, n_classes) array for some other models.
 
     Parameters
     ----------
-    dataset: PDData
-        Dataset that has ground truth
-    clusterer: Clusterer
-        Clusterer object that will do predicting.
-    split: string
-        Which split in the dataset are we evaluating?
+    model: Any
+        a fitted tree classifier
+    X: np.ndarray
+        the feature rows to explain
 
     Returns
     -------
-    Dict: Dictionary of clusterwise metrics.
-    Dict: Same as above but broken down by paper.
+    np.ndarray: the positive-class SHAP values
     """
-    block_dict = dataset.get_blocks()
-    (
-        train_block_dict,
-        val_block_dict,
-        test_block_dict,
-    ) = dataset.split_cluster_papers()
-    # evaluation must happen only on test-papers in blocks, so remove train/val papers
-    observed_papers = set()
-    for _, papers in train_block_dict.items():
-        for paper in papers:
-            observed_papers.add(paper)
-
-    # use entire block of papers for predictions
-    # NOTE: train/val/test block dicts can have overlapping papers in the incremental case
-    eval_block_dict_full = {}
-    if split == "test":
-        for block_key, _ in test_block_dict.items():
-            eval_block_dict_full[block_key] = block_dict[block_key]
-        for _, papers in val_block_dict.items():
-            for paper in papers:
-                observed_papers.add(paper)
-    elif split == "val":
-        eval_block_dict_full = copy.deepcopy(val_block_dict)
-        for block_key, papers in train_block_dict.items():
-            if block_key in eval_block_dict_full:
-                eval_block_dict_full[block_key].extend(papers)
-    else:
-        raise Exception("Evaluation split must be one of: {val, test}!")
-
-    partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {}
-    list_obs_papers = list(observed_papers)
-    # considers the supervision as distances
-    for i, paper_i in enumerate(list_obs_papers):
-        for paper_j in list_obs_papers[i + 1 : len(list_obs_papers)]:
-            if dataset.paper_to_cluster_id[paper_i] == dataset.paper_to_cluster_id[paper_j]:
-                if not dataset.paper_to_cluster_id[paper_i].endswith(ORPHAN_CLUSTER_KEY):
-                    partial_supervision[(paper_i, paper_j)] = 0
-            else:
-                partial_supervision[(paper_i, paper_j)] = 1
-
-    # predict on test-blocks
-    pred_clusters, _ = clusterer.predict(eval_block_dict_full, dataset, partial_supervision=partial_supervision)
-    # to avoid sparsity in b3 computation, we use all the papers' ground-truth
-    full_cluster_to_papers = dataset.construct_cluster_to_papers(pred_clusters)
-
-    eval_only_pred_clusters = {}
-    for cluster_key, papers in pred_clusters.items():
-        test_papers = list(set(papers).difference(observed_papers))
-        assert len(set(test_papers).intersection(observed_papers)) == 0
-        if len(test_papers) > 0:
-            eval_only_pred_clusters[cluster_key] = test_papers
-
-    # get metrics
-    b3_p, b3_r, b3_f1, b3_metrics_per_paper, _, _ = b3_precision_recall_fscore(
-        full_cluster_to_papers, pred_clusters, skip_papers=observed_papers
-    )
-    metrics = {"B3 (P, R, F1)": (b3_p, b3_r, b3_f1)}
-
-    return metrics, b3_metrics_per_paper
-
-
-def facet_eval(
-    dataset: "PDData",
-    metrics_per_paper: Dict[str, Tuple[float, float, float]],
-) -> Tuple[Dict[int, List], Dict[int, List], Dict[int, List], Dict[int, List], Dict[int, List], List[dict]]:
-    """
-    Extracts B3 per facets.
-    The returned dictionaries are keyed by the metric itself. For example, the keys of the
-    homonymity_f1 variable are floating points between 0 and 1 indicating the amount
-    of homonymity. The values are the per-paper B3s that have this amount of homonymity.
-
-    Parameters
-    ----------
-    dataset: PDData Input dataset
-    metrics_per_paper: Dict
-        B3 P/R/F1 per paper.
-        Second output of cluster_eval function.
-
-    Returns
-    -------
-    Dict: B3 F1 broken down by number of paper authors.
-    Dict: B3 F1 broken down by year.
-    Dict: B3 F1 broken down by block size.
-    Dict: B3 F1 broken down by true cluster size.
-    Dict: B3 F1 broken down by whether there is an abstract
-    """
-    block_len_dict = {}
-    blocks = dataset.get_blocks()
-
-    for block_key, sourced_paper_ids in blocks.items():
-        block_len_dict[block_key] = len(sourced_paper_ids)
-
-    # we need to know the length of each cluster
-    assert dataset.clusters is not None
-    cluster_len_dict = {}
-    for cluster_id, cluster_dict in dataset.clusters.items():
-        if not cluster_id.endswith(ORPHAN_CLUSTER_KEY):
-            cluster_len_dict[cluster_id] = len(cluster_dict["sourced_paper_ids"])
-
-    # Keep track of facet specific f-score performance
-    author_num_f1 = defaultdict(list)
-    year_f1 = defaultdict(list)
-    block_len_f1 = defaultdict(list)
-    cluster_len_f1 = defaultdict(list)
-    abstract_f1 = defaultdict(list)
-
-    paper_lookup = list()
-
-    for sourced_paper_id, (p, r, f1) in metrics_per_paper.items():
-
-        _paper_dict = dict()
-
-        cluster_id = dataset.paper_to_cluster_id[sourced_paper_id]
-        if not cluster_id.endswith(ORPHAN_CLUSTER_KEY):
-            paper = dataset.papers[str(sourced_paper_id)]
-
-            author_num_f1[len(paper.authors)].append(f1)
-            year_f1[paper.year].append(f1)
-            cluster_len_f1[cluster_len_dict[cluster_id]].append(f1)
-
-            # full first-name
-            if paper.has_abstract:
-                abstract_f1[1].append(f1)
-                _paper_dict["abstract"] = 1
-            else:
-                abstract_f1[0].append(f1)
-                _paper_dict["abstract"] = 0
-
-            block_len_f1[block_len_dict[paper.block]].append(f1)
-
-            _paper_dict["block size"] = block_len_dict[paper.block]
-            _paper_dict["sourced_paper_id"] = sourced_paper_id  # type: ignore
-            _paper_dict["precision"] = p  # type: ignore
-            _paper_dict["recall"] = r  # type: ignore
-            _paper_dict["f1"] = f1  # type: ignore
-            _paper_dict["#authors"] = len(paper.authors)
-            _paper_dict["year"] = paper.year
-            _paper_dict["cluster size"] = cluster_len_dict[cluster_id]
-
-            paper_lookup.append(_paper_dict)
-
-    return (
-        dict(author_num_f1),
-        dict(year_f1),
-        dict(block_len_f1),
-        dict(cluster_len_f1),
-        dict(abstract_f1),
-        paper_lookup,
-    )
+    values = shap.TreeExplainer(model).shap_values(X)
+    if isinstance(values, list):
+        return values[1]
+    values = np.asarray(values)
+    return values[..., 1] if values.ndim == 3 else values
 
 
 def pairwise_eval(
-    X: np.array,
-    y: np.array,
+    X: np.ndarray,
+    y: np.ndarray,
     classifier: Any,
     figs_path: str,
     title: str,
     shap_feature_names: List[str],
     thresh_for_f1: float = 0.5,
     shap_plot_type: Optional[str] = "dot",
-    nameless_classifier: Optional[Any] = None,
-    nameless_X: Optional[np.array] = None,
-    nameless_feature_names: Optional[List[str]] = None,
     skip_shap: bool = False,
 ) -> Dict[str, float]:
     """
@@ -288,9 +133,9 @@ def pairwise_eval(
 
     Parameters
     ----------
-    X: np.array
+    X: np.ndarray
         Feature matrix of features to do eval on.
-    y: np.array
+    y: np.ndarray
         Feature matrix of labels to do eval on.
     classifier: sklearn compatible classifier
         Classifier to do eval on.
@@ -305,12 +150,6 @@ def pairwise_eval(
     shap_plot_type: str
         Type of shap plot. Defaults to 'dot'.
         Can also be: 'bar', 'violin', 'compact_dot'
-    nameless_classifier: sklearn compatible classifier
-        Classifier to do eval on that doesn't use name features.
-    nameless_X: np.array
-        Feature matrix of features to do eval on excluding name features.
-    nameless_feature_names: List[str]
-        List of feature names for the SHAP plots excluding name features.
     skip_shap: bool
         Whether to skip SHAP entirely.
 
@@ -326,13 +165,7 @@ def pairwise_eval(
     if hasattr(classifier, "classifier"):
         classifier = classifier.classifier
 
-    if nameless_classifier is not None and hasattr(nameless_classifier, "classifier"):
-        nameless_classifier = nameless_classifier.classifier
-
-    if nameless_classifier is not None:
-        y_prob = (classifier.predict_proba(X)[:, 1] + nameless_classifier.predict_proba(nameless_X)[:, 1]) / 2
-    else:
-        y_prob = classifier.predict_proba(X)[:, 1]
+    y_prob = classifier.predict_proba(X)[:, 1]
 
     # plot AUROC
     fpr, tpr, _ = roc_curve(y, y_prob)
@@ -340,8 +173,8 @@ def pairwise_eval(
 
     plt.figure(0, figsize=(15, 15))
     plt.plot(fpr, tpr, lw=2, label="ROC curve (area = %0.2f)" % roc_auc)
-    plt.xlim([-0.01, 1.0])
-    plt.ylim([0.0, 1.05])
+    plt.xlim((-0.01, 1.0))
+    plt.ylim((0.0, 1.05))
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.title(f"ROC Curve for {title}")
@@ -370,70 +203,21 @@ def pairwise_eval(
     plt.close()
 
     # plot SHAP
-    # note that SHAP doesn't support model stacking directly
-    # so we have to approximate by getting SHAP values for each
-    # of the models inside the stack
     if not skip_shap:
-        from s2apler.model import VotingClassifier  # avoid circular import
-
-        if isinstance(classifier, VotingClassifier):
-            shap_values_all = []
-            for c in classifier.estimators:
-                if isinstance(c, CalibratedClassifierCV):
-                    shap_values_all.append(shap.TreeExplainer(c.base_estimator).shap_values(X)[1])
-                else:
-                    shap_values_all.append(shap.TreeExplainer(c).shap_values(X)[1])
-            shap_values = [np.mean(shap_values_all, axis=0)]
-        elif nameless_classifier is not None:
-            shap_values = []
-            for c, d in [(classifier, X), (nameless_classifier, nameless_X)]:
-                if isinstance(classifier, CalibratedClassifierCV):
-                    shap_values.append(shap.TreeExplainer(c.base_estimator).shap_values(d)[1])
-                else:
-                    shap_values.append(shap.TreeExplainer(c).shap_values(d)[1])
-        elif isinstance(classifier, CalibratedClassifierCV):
-            shap_values = shap.TreeExplainer(classifier.base_estimator).shap_values(X)[1]
-        else:
-            shap_values = shap.TreeExplainer(classifier).shap_values(X)[1]
-
-        if isinstance(shap_values, list):
-            for i, (shap_value, feature_names, d) in enumerate(
-                zip(
-                    shap_values,
-                    [shap_feature_names, nameless_feature_names],
-                    [X, nameless_X],
-                )
-            ):
-                assert feature_names is not None, "neither feature_names should be None here"
-                plt.figure(2 + i)
-                shap.summary_plot(
-                    shap_value,
-                    d,
-                    plot_type=shap_plot_type,
-                    feature_names=feature_names,
-                    show=False,
-                    max_display=len(feature_names),
-                )
-                # plt.title(f"{i}: SHAP Values for {title}")
-                plt.tight_layout()
-                plt.savefig(join(figs_path, base_name + f"_shap_{i}.png"))
-                plt.clf()
-                plt.close()
-        else:
-            plt.figure(2)
-            shap.summary_plot(
-                shap_values,
-                X,
-                plot_type=shap_plot_type,
-                feature_names=shap_feature_names,
-                show=False,
-                max_display=len(shap_feature_names),
-            )
-            # plt.title(f"SHAP Values for {title}")
-            plt.tight_layout()
-            plt.savefig(join(figs_path, base_name + "_shap.png"))
-            plt.clf()
-            plt.close()
+        shap_values = _positive_class_shap_values(classifier, X)
+        plt.figure(2)
+        shap.summary_plot(
+            shap_values,
+            X,
+            plot_type=shap_plot_type,
+            feature_names=shap_feature_names,
+            show=False,
+            max_display=len(shap_feature_names),
+        )
+        plt.tight_layout()
+        plt.savefig(join(figs_path, base_name + "_shap.png"))
+        plt.clf()
+        plt.close()
 
     # collect metrics and return
     pr, rc, f1, _ = precision_recall_fscore_support(y, y_prob > thresh_for_f1, beta=1.0, average="macro")
@@ -468,8 +252,7 @@ def b3_precision_recall_fscore(true_clus, pred_clus, skip_papers=None):
         dictionary with cluster id as keys and 1d array containing
         the predicted paper id assignments as values.
     skip_papers: List[string]
-        in the incremental setting blocks can be partially supervised,
-        hence those instances are not used for evaluation.
+        papers to leave out of the evaluation, such as partially supervised ones
 
     Returns
     -------
@@ -498,7 +281,6 @@ def b3_precision_recall_fscore(true_clus, pred_clus, skip_papers=None):
     if tcset != pcset:
         raise ValueError("Predictions do not cover all the papers!")
 
-    # incremental evaluation contains partially observed papers
     # skip_papers are observed papers, which we skip for b3 calc.
     if skip_papers is not None:
         tcset = tcset.difference(skip_papers)

@@ -2,10 +2,9 @@ from typing import Optional, Union, Dict, List, Any, Tuple, Set, NamedTuple
 
 import random
 import re
+import urllib.parse
 import json
 import numpy as np
-import pandas as pd
-import pickle
 import logging
 import multiprocessing
 from tqdm import tqdm
@@ -31,6 +30,8 @@ from s2apler.text import (
     NAME_PREFIXES,
     A_THROUGH_Z,
     PUBLISHER_SOURCES,
+    is_correction_notice,
+    marks_notice_identifiers,
 )
 
 logger = logging.getLogger("s2apler")
@@ -53,20 +54,15 @@ class Paper(NamedTuple):
     title: str
     abstract: Optional[str]
     has_abstract: Optional[bool]
-    title_ngrams_words: Optional[Counter]
     abstract_ngrams_words: Optional[Counter]
     authors: List[Author]
     venue: Optional[str]
     journal_name: Optional[str]
     title_ngrams_chars: Optional[Counter]
     venue_ngrams: Optional[Counter]
-    journal_ngrams: Optional[Counter]
     author_info_coauthor_n_grams: Optional[Counter]
-    author_info_coauthor_email_prefix_n_grams: Optional[Counter]
-    author_info_coauthor_email_suffix_n_grams: Optional[Counter]
-    author_info_coauthor_affiliations_n_grams: Optional[Counter]
     year: Optional[int]
-    sourced_paper_id: int
+    sourced_paper_id: str
     corpus_paper_id: Optional[int]  # this is the id of the paper's current mapping in the corpus
     doi: Optional[str]
     pmid: Optional[str]
@@ -75,7 +71,73 @@ class Paper(NamedTuple):
     source: Optional[str]
     block: Optional[str]
     source_uris: Optional[List[str]] = None
+    # The texts the n-gram counters above come from. Preprocessing keeps these and leaves the
+    # counters empty: the native featurizer counts n-grams itself, and with_counters builds
+    # the Counters when Python needs them.
+    title_ngram_text: Optional[str] = None
+    abstract_ngram_text: Optional[str] = None
+    venue_ngram_text: Optional[str] = None
+    coauthor_ngram_text: Optional[str] = None
     arxiv_id: Optional[str] = None
+
+
+# Resolver URLs, with or without scheme or host prefix: https://doi.org/, http://dx.doi.org/, doi.org/.
+DOI_URL_PREFIX = re.compile(r"^(?:https?://)?(?:dx\.|www\.)?doi\.org/", re.IGNORECASE)
+# Scheme labels: doi:10.1/a, urn:doi:10.1/a.
+DOI_SCHEME_PREFIX = re.compile(r"^(?:urn:)?doi:\s*", re.IGNORECASE)
+
+
+def _blank_to_none(value: Any) -> Optional[str]:
+    """Trims an identifier to a string, treating blanks as missing.
+
+    Blank IDs would otherwise force unrelated papers together. Training data stores some
+    PMIDs as JSON ints, so non-strings are converted rather than rejected.
+    """
+    if value is None:
+        return None
+    return str(value).strip() or None
+
+
+def normalize_doi(doi: Optional[str]) -> Optional[str]:
+    """Canonicalizes a DOI: trims, strips resolver prefixes, decodes URL escapes, lowercases.
+
+    One work can arrive as "10.1/a#b" and "https://doi.org/10.1/A%23b". Without this, the two
+    don't match, and a PDF they share looks like it holds two different DOI'd items.
+    """
+    if doi is None:
+        return None
+    doi = doi.strip()
+    url_prefix = DOI_URL_PREFIX.match(doi)
+    if url_prefix:
+        # URLs percent-encode DOI characters such as "#"; a bare DOI may hold a literal "%".
+        doi = urllib.parse.unquote(doi[url_prefix.end() :])
+    else:
+        doi = DOI_SCHEME_PREFIX.sub("", doi, count=1)
+    return doi.strip().lower() or None
+
+
+def _codes(values: List[Any]) -> np.ndarray:
+    """Integer codes for hashable values, equal codes for equal values; None becomes -1.
+
+    A value unequal to itself, such as NaN, gets a code of its own, as == and != treat it.
+    A dict would match one NaN object to itself by identity.
+    """
+    table: Dict[Any, int] = {}
+
+    def code(value: Any) -> int:
+        if value is None:
+            return -1
+        if value != value:
+            table[object()] = len(table)
+            return len(table) - 1
+        return table.setdefault(value, len(table))
+
+    return np.fromiter((code(value) for value in values), dtype=np.int64, count=len(values))
+
+
+def condensed_offsets(i: np.ndarray, j: np.ndarray, n: int) -> np.ndarray:
+    """Positions of pairs (i, j), i < j, in a condensed n-by-n distance vector."""
+    return i * n - i * (i + 1) // 2 + (j - i - 1)
 
 
 RE_ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
@@ -138,24 +200,16 @@ class PDData:
 
     Input:
         papers: path to the papers information json file (or the json object)
-        name: name of the dataset, used for caching computed features
+        name: name of the dataset; Clusterer.fit looks up precomputed distances by it
         mode: 'train' or 'inference'; if 'inference', everything related to splitting will be ignored
         clusters: path to the clusters json file (or the json object)
             - a cluster may span multiple blocks, but we will only consider in-block clusters
             - there will be individual papers that definitely do not belong to any of the known clusters
               but which may or may not cluster with each other.
               papers in these clusters will all appear in clusters.json under the key clusterid_ORPHAN_CLUSTER_KEY
-        specter_embeddings: path to the specter embeddings pickle (or the dictionary object)
         cluster_seeds: path to the cluster seed json file (or the json object)
         altered_cluster_papers: path to the paper ids \n-separated txt file (or a list or set object)
             Clusters that these papers appear in will be marked as "altered"
-        train_pairs: path to predefined train pairs csv (or the dataframe object)
-        val_pairs: path to predefined val pairs csv (or the dataframe object)
-        test_pairs: path to predefined test pairs csv (or the dataframe object)
-        train_papers: path to predefined train papers (or the json object)
-        val_papers: path to predefined val papers (or the json object)
-        test_papers: path to predefined test papers (or the json object)
-        unit_of_data_split: options are ("papers", "blocks", "time")
         num_clusters_for_block_size: probably leave as default,
             controls train/val/test splits based on block size
         train_ratio: training ratio of instances for clustering
@@ -177,16 +231,10 @@ class PDData:
         name: str,
         mode: str = "train",
         clusters: Optional[Union[str, Dict]] = None,
-        specter_embeddings: Optional[Union[str, Dict]] = None,
+        # Keyword-only: removed parameters used to sit here, so old positional calls must fail.
+        *,
         cluster_seeds: Optional[Union[str, Dict]] = None,
         altered_cluster_papers: Optional[Union[str, List, Set]] = None,
-        train_pairs: Optional[Union[str, List]] = None,
-        val_pairs: Optional[Union[str, List]] = None,
-        test_pairs: Optional[Union[str, List]] = None,
-        train_papers: Optional[Union[str, List]] = None,
-        val_papers: Optional[Union[str, List]] = None,
-        test_papers: Optional[Union[str, List]] = None,
-        unit_of_data_split: str = "blocks",
         num_clusters_for_block_size: int = 1,
         train_ratio: float = 0.8,
         val_ratio: float = 0.1,
@@ -210,7 +258,6 @@ class PDData:
                 abstract=paper.get("abstract", None),
                 has_abstract=paper.get("abstract", None) not in {"", None},
                 title_ngrams_chars=None,
-                title_ngrams_words=None,
                 abstract_ngrams_words=None,
                 authors=[
                     Author(
@@ -233,25 +280,22 @@ class PDData:
                 venue=paper.get("venue", None),
                 journal_name=paper.get("journal_name", None),
                 venue_ngrams=None,
-                journal_ngrams=None,
                 author_info_coauthor_n_grams=None,
-                author_info_coauthor_email_prefix_n_grams=None,
-                author_info_coauthor_email_suffix_n_grams=None,
-                author_info_coauthor_affiliations_n_grams=None,
                 year=paper.get("year", None),
                 sourced_paper_id=sourced_paper_id,
-                doi=paper.get("doi", None),
-                pmid=paper.get("pmid", None),
+                doi=normalize_doi(paper.get("doi", None)),
+                pmid=_blank_to_none(paper.get("pmid", None)),
                 source=paper.get("source", None),
                 source_id=paper.get("source_id", None),
-                pdf_hash=paper.get("pdf_hash", None),
+                pdf_hash=_blank_to_none(paper.get("pdf_hash", None)),
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
                 source_uris=paper.get("source_uris", None),
                 arxiv_id=extract_arxiv_id(
                     paper.get("source", None),
                     paper.get("source_id", None),
-                    paper.get("doi", None),
+                    # The normalized DOI, so a resolver URL for the arXiv DOI still yields the id.
+                    normalize_doi(paper.get("doi", None)),
                     paper.get("arxiv_id", None),
                 ),
             )
@@ -261,9 +305,7 @@ class PDData:
         self.mode = mode
         logger.debug("loading clusters")
         self.clusters: Optional[Dict] = self.maybe_load_json(clusters)
-        logger.debug("loaded clusters, loading specter")
-        self.specter_embeddings = self.maybe_load_specter(specter_embeddings)
-        logger.debug("loaded specter, loading cluster seeds")
+        logger.debug("loaded clusters, loading cluster seeds")
         cluster_seeds_dict = self.maybe_load_json(cluster_seeds)
         self.altered_cluster_papers = self.maybe_load_list(altered_cluster_papers)
         self.cluster_seeds_disallow = set()
@@ -284,13 +326,6 @@ class PDData:
                 cluster_num += 1
             self.max_seed_cluster_id = cluster_num
         logger.debug("loaded cluster seeds")
-        self.train_pairs = self.maybe_load_dataframe(train_pairs)
-        self.val_pairs = self.maybe_load_dataframe(val_pairs)
-        self.test_pairs = self.maybe_load_dataframe(test_pairs)
-        self.train_papers = self.maybe_load_json(train_papers)
-        self.val_papers = self.maybe_load_json(val_papers)
-        self.test_papers = self.maybe_load_json(test_papers)
-        self.unit_of_data_split = unit_of_data_split
         self.num_clusters_for_block_size = num_clusters_for_block_size
         self.train_ratio = train_ratio
         self.val_ratio = val_ratio
@@ -303,8 +338,7 @@ class PDData:
         self.all_test_pairs_flag = all_test_pairs_flag
         self.random_seed = random_seed
 
-        if self.clusters is None:
-            self.paper_to_cluster_id = None
+        self.paper_to_cluster_id: Optional[Dict[str, str]] = None
 
         if self.mode == "train":
             if self.clusters is not None:
@@ -325,6 +359,93 @@ class PDData:
         logger.debug("preprocessing papers")
         self.papers = preprocess_papers_parallel(self.papers, self.n_jobs)
         logger.debug("preprocessed papers")
+        self.multi_doi_pdf_hashes = self.get_multi_doi_pdf_hashes()
+        self.correction_notices = self.get_correction_notices()
+
+    def get_multi_doi_pdf_hashes(self) -> Set[str]:
+        """Finds pdf_hashes shared by papers that carry different DOIs.
+
+        One PDF often holds several short items: a page of BMJ letters, Nature research
+        highlights, a meeting-abstract supplement. Each item has its own DOI, so a pdf_hash
+        seen with two DOIs names a container, not a paper, and must not force merges.
+        This spans the whole dataset, not one block: a container PDF is one everywhere.
+
+        Returns
+        -------
+        Set[str]: the pdf_hashes that map to more than one distinct DOI
+        """
+        dois_by_hash: Dict[str, Set[str]] = defaultdict(set)
+        for paper in self.papers.values():
+            if paper.pdf_hash is not None and paper.doi is not None:
+                dois_by_hash[paper.pdf_hash].add(paper.doi)
+        return {pdf_hash for pdf_hash, dois in dois_by_hash.items() if len(dois) > 1}
+
+    def get_correction_notices(self) -> Set[str]:
+        """Finds the papers that are correction notices.
+
+        Papers linked by a shared DOI, PMID, usable pdf_hash or arXiv id end up in one cluster, so each
+        linked group is all notices or none; anything else would contradict the forced merge.
+        A group is a notice when it holds a "Correction: X" paper with its own DOI or PMID,
+        because a notice's copies often drop the prefix and its PDF often carries the
+        article's title. A PDF record linked only by pdf_hash doesn't count: some carry the
+        notice's title but the article's PDF. A group is also a notice when every titled
+        paper in it is one. A group mixing other notice titles, such
+        as "Retraction note: X", with plain titles counts as the article: such records
+        sometimes carry the article's own DOI.
+
+        Returns
+        -------
+        Set[str]: ids of the papers that are correction notices
+        """
+        parent = {paper_id: paper_id for paper_id in self.papers}
+
+        def find(paper_id: str) -> str:
+            while parent[paper_id] != paper_id:
+                parent[paper_id] = parent[parent[paper_id]]
+                paper_id = parent[paper_id]
+            return paper_id
+
+        first_with_key: Dict[Tuple[str, str], str] = {}
+        for paper_id in self.papers:
+            for key in self.id_merge_keys(paper_id):
+                if key in first_with_key:
+                    parent[find(paper_id)] = find(first_with_key[key])
+                else:
+                    first_with_key[key] = paper_id
+        marked: Set[str] = set()
+        titled_notices: Dict[str, bool] = {}
+        for paper_id, paper in self.papers.items():
+            root = find(paper_id)
+            if marks_notice_identifiers(paper.title) and (paper.doi is not None or paper.pmid is not None):
+                marked.add(root)
+            if paper.title:
+                titled_notices[root] = titled_notices.get(root, True) and is_correction_notice(paper.title)
+        notice_roots = marked | {root for root, all_notices in titled_notices.items() if all_notices}
+        return {paper_id for paper_id in self.papers if find(paper_id) in notice_roots}
+
+    def id_merge_keys(self, paper_id: str) -> List[Tuple[str, str]]:
+        """Lists the identifiers that force a paper into the same cluster as others.
+
+        Parameters
+        ----------
+        paper_id: string
+            the paper id
+
+        Returns
+        -------
+        List[Tuple[str, str]]: (id type, value) pairs for the DOI, PMID, usable pdf_hash and arXiv id
+        """
+        paper = self.papers[str(paper_id)]
+        keys = []
+        if paper.doi is not None:
+            keys.append(("doi", paper.doi))
+        if paper.pmid is not None:
+            keys.append(("pmid", paper.pmid))
+        if paper.pdf_hash is not None and paper.pdf_hash not in self.multi_doi_pdf_hashes:
+            keys.append(("pdf_hash", paper.pdf_hash))
+        if paper.arxiv_id is not None:
+            keys.append(("arxiv_id", paper.arxiv_id))
+        return keys
 
     @staticmethod
     def maybe_load_json(path_or_json: Optional[Union[str, Union[List, Dict]]]) -> Any:
@@ -366,49 +487,6 @@ class PDData:
                 return f.read().strip().split("\n")
         else:
             return path_or_list
-
-    @staticmethod
-    def maybe_load_dataframe(path_or_dataframe: Optional[Union[str, pd.DataFrame]]) -> Optional[pd.DataFrame]:
-        """
-        Either loads a dataframe from a csv file or passes through the object
-
-        Parameters
-        ----------
-        path_or_dataframe: string or dataframe
-            the file path or the object
-
-        Returns
-        -------
-        either the loaded dataframe, or the passed in object
-        """
-        if type(path_or_dataframe) == str:
-            return pd.read_csv(path_or_dataframe, sep=",")
-        else:
-            return path_or_dataframe
-
-    @staticmethod
-    def maybe_load_specter(path_or_pickle: Optional[Union[str, Dict]]) -> Optional[Dict]:
-        """
-        Either loads a dictionary from a pickle file or passes through the object
-
-        Parameters
-        ----------
-        path_or_pickle: string or dictionary
-            the file path or the object
-
-        Returns
-        -------
-        either the loaded json, or the passed in object
-        """
-        if isinstance(path_or_pickle, str):
-            with open(path_or_pickle, "rb") as _pickle_file:
-                X, keys = pickle.load(_pickle_file)
-            D = {}
-            for i, key in enumerate(keys):
-                D[key] = X[i, :]
-            return D
-        else:
-            return path_or_pickle
 
     def get_constraint(
         self,
@@ -467,8 +545,12 @@ class PDData:
         elif paper_1.pmid is not None and paper_2.pmid is not None and paper_1.pmid == paper_2.pmid:
             # if pmid is the same - same paper
             return CLUSTER_SEEDS_LOOKUP["require"]
-        elif paper_1.pdf_hash is not None and paper_2.pdf_hash is not None and paper_1.pdf_hash == paper_2.pdf_hash:
-            # same pdf hash - same paper
+        elif (
+            paper_1.pdf_hash is not None
+            and paper_1.pdf_hash == paper_2.pdf_hash
+            and paper_1.pdf_hash not in self.multi_doi_pdf_hashes
+        ):
+            # same pdf hash - same paper, unless the PDF holds several DOI'd items
             return CLUSTER_SEEDS_LOOKUP["require"]
         elif paper_1.arxiv_id is not None and paper_2.arxiv_id is not None and paper_1.arxiv_id == paper_2.arxiv_id:
             # same arXiv id - same paper. arXiv-only records carry no DOI (S2 does not derive
@@ -503,8 +585,161 @@ class PDData:
         ):
             # same source but different ids: can't be the same paper
             return CLUSTER_SEEDS_LOOKUP["disallow"]
+        elif (paper_id_1 in self.correction_notices) != (paper_id_2 in self.correction_notices):
+            # a correction notice and the paper it corrects share title, authors and venue,
+            # but are different works (allenai/scholar#42255); shared identifiers still merge
+            return CLUSTER_SEEDS_LOOKUP["disallow"]
         else:
             return None
+
+    def block_pair_rules(self, paper_ids: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+        """Finds the pairs of one block that constraint rules match by index, not by array.
+
+        Both rules match few pairs, so constraint_values looks them up here once per block
+        instead of once per chunk of pairs.
+
+        Parameters
+        ----------
+        paper_ids: List[str]
+            the block's paper ids
+
+        Returns
+        -------
+        np.ndarray: condensed offsets of pairs with the same source URI and title, whose
+            strong signals agree
+        np.ndarray: condensed offsets of pairs the cluster seeds disallow
+        """
+        papers = [self.papers[str(paper_id)] for paper_id in paper_ids]
+        n = len(papers)
+
+        def offsets(pairs: List[Tuple[int, int]]) -> np.ndarray:
+            if not pairs:
+                return np.array([], dtype=np.int64)
+            i, j = np.array(pairs, dtype=np.int64).T
+            return condensed_offsets(np.minimum(i, j), np.maximum(i, j), n)
+
+        by_uri_and_title = defaultdict(list)
+        for position, paper in enumerate(papers):
+            if paper.source_uris and paper.title:
+                for uri in set(paper.source_uris):
+                    by_uri_and_title[(uri, paper.title)].append(position)
+        candidates = {
+            (members[a], members[b])
+            for members in by_uri_and_title.values()
+            for a in range(len(members))
+            for b in range(a + 1, len(members))
+        }
+        same_uri_and_title = [
+            (i, j) for i, j in sorted(candidates) if not _strong_signals_disagree(papers[i], papers[j])
+        ]
+
+        position = {paper_id: k for k, paper_id in enumerate(paper_ids)}
+        partners = self._disallow_partners()
+        disallowed = [
+            (position[paper_id], position[partner])
+            for paper_id in paper_ids
+            for partner in partners.get(paper_id, ())
+            if partner in position and partner != paper_id
+        ]
+        return offsets(same_uri_and_title), offsets(disallowed)
+
+    def _disallow_partners(self) -> Dict[str, Set[str]]:
+        """Each paper's disallowed partners, rebuilt only when the seed set changes."""
+        key = (id(self.cluster_seeds_disallow), len(self.cluster_seeds_disallow))
+        cached = getattr(self, "_disallow_partners_cache", None)
+        if cached is None or cached[0] != key:
+            partners: Dict[str, Set[str]] = defaultdict(set)
+            for paper_a, paper_b in self.cluster_seeds_disallow:
+                partners[paper_a].add(paper_b)
+                partners[paper_b].add(paper_a)
+            cached = (key, dict(partners))
+            self._disallow_partners_cache = cached
+        return cached[1]
+
+    def constraint_values(
+        self,
+        paper_ids: List[str],
+        left: np.ndarray,
+        right: np.ndarray,
+        first_offset: int = 0,
+        dont_merge_cluster_seeds: bool = True,
+        incremental_dont_use_cluster_seeds: bool = False,
+        pair_rules: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    ) -> np.ndarray:
+        """Applies get_constraint to many pairs of one block at once.
+
+        Pairs (left[k], right[k]) index into paper_ids, with left[k] < right[k], and are
+        consecutive entries of the block's condensed distance vector from first_offset on.
+        Each rule fills its pairs from the lowest precedence up, so the rule that
+        get_constraint checks first wins.
+
+        Parameters
+        ----------
+        paper_ids: List[str]
+            the block's paper ids
+        left: np.ndarray
+            the first paper of each pair
+        right: np.ndarray
+            the second paper of each pair
+        first_offset: int
+            the condensed offset of the first pair
+        dont_merge_cluster_seeds: bool
+            as for get_constraint
+        incremental_dont_use_cluster_seeds: bool
+            as for get_constraint
+        pair_rules: Tuple[np.ndarray, np.ndarray]
+            block_pair_rules(paper_ids), when the caller already has it for this block
+
+        Returns
+        -------
+        np.ndarray: the constraint value of each pair, NaN where get_constraint returns None
+        """
+        papers = [self.papers[str(paper_id)] for paper_id in paper_ids]
+        values = np.full(len(left), np.nan)
+        same_uri_and_title, disallowed = self.block_pair_rules(paper_ids) if pair_rules is None else pair_rules
+
+        def fill_offsets(offsets: np.ndarray, value: float):
+            # Rules that match few pairs are found by index, then placed by condensed offset.
+            offsets = offsets - first_offset
+            values[offsets[(offsets >= 0) & (offsets < len(values))]] = value
+
+        source = _codes([paper.source for paper in papers])
+        is_publisher = np.array([paper.source in PUBLISHER_SOURCES for paper in papers], dtype=bool)
+        source_id = _codes([paper.source_id for paper in papers])
+        same = (
+            (source_id[left] >= 0)
+            & (source_id[right] >= 0)
+            & (source[left] == source[right])
+            & is_publisher[left]
+            & (source_id[left] != source_id[right])
+        )
+        values[same] = CLUSTER_SEEDS_LOOKUP["disallow"]
+        notice = np.array([paper_id in self.correction_notices for paper_id in paper_ids], dtype=bool)
+        values[notice[left] != notice[right]] = CLUSTER_SEEDS_LOOKUP["disallow"]
+
+        # Same source URI and the same title.
+        fill_offsets(same_uri_and_title, CLUSTER_SEEDS_LOOKUP["require"])
+
+        pdf_hash = _codes(
+            [paper.pdf_hash if paper.pdf_hash not in self.multi_doi_pdf_hashes else None for paper in papers]
+        )
+        for codes in (
+            _codes([paper.arxiv_id for paper in papers]),
+            pdf_hash,
+            _codes([paper.pmid for paper in papers]),
+            _codes([paper.doi for paper in papers]),
+        ):
+            values[(codes[left] >= 0) & (codes[left] == codes[right])] = CLUSTER_SEEDS_LOOKUP["require"]
+
+        seed = _codes([self.cluster_seeds_require.get(paper_id) for paper_id in paper_ids])
+        both_seeded = (seed[left] >= 0) & (seed[right] >= 0)
+        if dont_merge_cluster_seeds:
+            values[both_seeded & (seed[left] != seed[right])] = CLUSTER_SEEDS_LOOKUP["disallow"]
+        if not incremental_dont_use_cluster_seeds:
+            values[both_seeded & (seed[left] == seed[right])] = CLUSTER_SEEDS_LOOKUP["require"]
+
+        fill_offsets(disallowed, CLUSTER_SEEDS_LOOKUP["disallow"])
+        return values
 
     def get_blocks(self) -> Dict[str, List[str]]:
         """
@@ -567,8 +802,11 @@ class PDData:
             x.append(block_id)
             y.append(len(papers))
 
+        # scikit-learn 1.4 changed the default to n_init="auto" (one run); keep the old 10 runs
+        # so the same random_seed gives the same block-size groups and splits.
         clustering_model = KMeans(
             n_clusters=self.num_clusters_for_block_size,
+            n_init=10,
             random_state=self.random_seed,
         ).fit(np.array(y).reshape(-1, 1))
         y_group = clustering_model.labels_
@@ -593,131 +831,17 @@ class PDData:
 
         return train_block_dict, val_block_dict, test_block_dict
 
-    def group_paper_helper(self, paper_list: List[str]) -> Dict[str, List[str]]:
-        """
-        Creates a block dict containing a specific input paper list
-
-        Parameters
-        ----------
-        paper_list: List
-            the list of papers to include
-
-        Returns
-        -------
-        Dict: the block dict for the input papers
-        """
-        block_to_papers: Dict[str, List[str]] = {}
-
-        for s in paper_list:
-            if self.paper_to_block[s] not in block_to_papers:
-                block_to_papers[self.paper_to_block[s]] = [s]
-            else:
-                block_to_papers[self.paper_to_block[s]].append(s)
-        return block_to_papers
-
     def split_cluster_papers(
         self,
     ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
         """
-        Splits the block dict into train/val/test blocks based on split type requested.
-        Options for splitting are `papers`, `blocks`, and `time`
+        Splits the blocks into train/val/test blocks, keeping each block whole
 
         Returns
         -------
         train/val/test block dictionaries
         """
-        blocks = self.get_blocks()
-
-        if self.unit_of_data_split == "papers":
-            paper_keys = list(self.papers.keys())
-            train_papers, val_test_papers = train_test_split(
-                paper_keys,
-                test_size=self.val_ratio + self.test_ratio,
-                random_state=self.random_seed,
-            )
-            val_papers, test_papers = train_test_split(
-                val_test_papers,
-                test_size=self.test_ratio / (self.val_ratio + self.test_ratio),
-                random_state=self.random_seed,
-            )
-            train_block_dict = self.group_paper_helper(train_papers)
-            val_block_dict = self.group_paper_helper(val_papers)
-            test_block_dict = self.group_paper_helper(test_papers)
-            return train_block_dict, val_block_dict, test_block_dict
-
-        elif self.unit_of_data_split == "blocks":
-            (
-                train_block_dict,
-                val_block_dict,
-                test_block_dict,
-            ) = self.split_blocks_helper(blocks)
-            return train_block_dict, val_block_dict, test_block_dict
-
-        elif self.unit_of_data_split == "time":
-            paper_to_year = {}
-            for sourced_paper_id, paper in self.papers.items():
-                # sourced_paper_id should be kept as string, so it can be matched to papers.json
-                sourced_paper_id = str(paper.sourced_paper_id)
-                if paper.year is None:
-                    paper_to_year[sourced_paper_id] = 0
-                else:
-                    paper_to_year[sourced_paper_id] = paper.year
-
-            train_size = int(len(paper_to_year) * self.train_ratio)
-            val_size = int(len(paper_to_year) * self.val_ratio)
-            papers_sorted_by_year = [i[0] for i in (sorted(paper_to_year.items(), key=lambda x: x[1]))]
-
-            train_papers = papers_sorted_by_year[0:train_size]
-            val_papers = papers_sorted_by_year[train_size : train_size + val_size]
-            test_papers = papers_sorted_by_year[train_size + val_size : len(papers_sorted_by_year)]
-
-            train_block_dict = self.group_paper_helper(train_papers)
-            val_block_dict = self.group_paper_helper(val_papers)
-            test_block_dict = self.group_paper_helper(test_papers)
-            return train_block_dict, val_block_dict, test_block_dict
-
-        else:
-            raise Exception(f"Unknown unit_of_data_split: {self.unit_of_data_split}")
-
-    def split_data_papers_fixed(
-        self,
-    ) -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
-        """
-        Splits the block dict into train/val/test blocks based on a fixed paper
-        based split
-
-        Returns
-        -------
-        train/val/test block dictionaries
-        """
-        train_block_dict: Dict[str, List[str]] = {}
-        val_block_dict: Dict[str, List[str]] = {}
-        test_block_dict: Dict[str, List[str]] = {}
-
-        test_papers = self.test_papers
-        logger.debug("fixed papers split")
-
-        if self.val_papers is None:
-            train_papers = []
-            val_papers = []
-            train_prob = self.train_ratio / (self.train_ratio + self.val_ratio)
-            np.random.seed(self.random_seed)
-            split_prob = np.random.rand(len(self.train_papers))
-            for paper, p in zip(self.train_papers, split_prob):
-                if p < train_prob:
-                    train_papers.append(paper)
-                else:
-                    val_papers.append(paper)
-            logger.debug(f"size of papers {len(train_papers), len(val_papers)}")
-        else:
-            train_papers = self.train_papers
-            val_papers = self.val_papers
-
-        train_block_dict = self.group_paper_helper(train_papers)
-        val_block_dict = self.group_paper_helper(val_papers)
-        test_block_dict = self.group_paper_helper(test_papers)
-
-        return train_block_dict, val_block_dict, test_block_dict
+        return self.split_blocks_helper(self.get_blocks())
 
     def split_pairs(
         self,
@@ -792,6 +916,7 @@ class PDData:
         -------
         Dict: the dictionary mapping cluster to papers
         """
+        assert self.paper_to_cluster_id is not None, "needs a dataset loaded with clusters in train mode"
         cluster_to_papers = defaultdict(list)
         for papers in block_dict.values():
             for paper in papers:
@@ -799,44 +924,6 @@ class PDData:
                 cluster_to_papers[true_cluster_id].append(paper)
 
         return dict(cluster_to_papers)
-
-    def fixed_pairs(
-        self,
-    ) -> Tuple[
-        List[Tuple[str, str, Union[int, float]]],
-        List[Tuple[str, str, Union[int, float]]],
-        List[Tuple[str, str, Union[int, float]]],
-    ]:
-        """
-        creates pairs for the pairwise classification task from a fixed train/val/test split
-
-        Returns
-        -------
-        train/val/test pairs, where each pair is (paper_id_1, paper_id_2, label)
-        """
-        assert (
-            self.train_pairs is not None and self.test_pairs is not None
-        ), "You need to pass in train and test pairs to use this function"
-        self.train_pairs.loc[:, "label"] = self.train_pairs["label"].map(
-            {"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1}
-        )
-        if self.val_pairs is not None:
-            self.val_pairs.loc[:, "label"] = self.val_pairs["label"].map(
-                {"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1}
-            )
-            train_pairs = list(self.train_pairs.to_records(index=False))
-            val_pairs = list(self.val_pairs.to_records(index=False))
-        else:
-            np.random.seed(self.random_seed)
-            # split train into train/val
-            train_prob = self.train_ratio / (self.train_ratio + self.val_ratio)
-            msk = np.random.rand(len(self.train_pairs)) < train_prob
-            train_pairs = list(self.train_pairs[msk].to_records(index=False))
-            val_pairs = list(self.train_pairs[~msk].to_records(index=False))
-        self.test_pairs.loc[:, "label"] = self.test_pairs["label"].map({"NO": 0, "YES": 1, "0": 0, 0: 0, "1": 1, 1: 1})
-        test_pairs = list(self.test_pairs.to_records(index=False))
-
-        return train_pairs, val_pairs, test_pairs
 
     def all_pairs(self) -> List[Tuple[str, str, Union[int, float]]]:
         """
@@ -1015,12 +1102,7 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
         title_lower_simple = ""
     else:
         title_lower_simple = paper.title.lower().replace(" ", "")
-    paper = paper._replace(
-        title=title,
-        # title_ngrams_words=get_text_ngrams_words(title, stopwords=None),
-        title_ngrams_chars=get_text_ngrams(title_lower_simple, stopwords=None, use_bigrams=False),
-        abstract_ngrams_words=get_text_ngrams_words(abstract, stopwords=None),
-    )
+    paper = paper._replace(title=title, title_ngram_text=title_lower_simple, abstract_ngram_text=abstract)
     venue = normalize_venue_name(paper.venue)
     journal_name = normalize_venue_name(paper.journal_name)
     if venue != journal_name:
@@ -1030,25 +1112,49 @@ def preprocess_paper_1(item: Tuple[str, Paper]) -> Tuple[str, Paper]:
     # sometimes venues have no letters a-z, in which case it's just page numbers
     if A_THROUGH_Z.search(combined_venue) is None:
         combined_venue = ""
-    venue_ngrams = get_text_ngrams(combined_venue, stopwords=None, use_bigrams=True)
-    paper = paper._replace(venue=venue, journal_name=journal_name, venue_ngrams=venue_ngrams)
+    paper = paper._replace(venue=venue, journal_name=journal_name, venue_ngram_text=combined_venue)
 
     authors = [preprocess_authors(author) for author in paper.authors]
-    author_info_coauthor_n_grams = get_text_ngrams(
-        " ".join([i.author_info_full_name for i in authors]),
-        stopwords=None,
-        use_unigrams=True,
-        use_bigrams=True,
-    )
-    doi = paper.doi.lower() if paper.doi is not None else None
-
     paper = paper._replace(
         authors=authors,
-        author_info_coauthor_n_grams=author_info_coauthor_n_grams,
-        doi=doi,
+        coauthor_ngram_text=" ".join([i.author_info_full_name for i in authors]),
     )
 
     return (key, paper)
+
+
+def with_counters(paper: Paper) -> Paper:
+    """Fills a preprocessed paper's empty n-gram counters from its n-gram texts.
+
+    Parameters
+    ----------
+    paper: Paper
+        a preprocessed paper; counters it already holds are kept
+
+    Returns
+    -------
+    Paper: the paper with every n-gram counter set
+    """
+    return paper._replace(
+        title_ngrams_chars=paper.title_ngrams_chars
+        if paper.title_ngrams_chars is not None
+        else get_text_ngrams(paper.title_ngram_text, stopwords=None, use_bigrams=False),
+        abstract_ngrams_words=paper.abstract_ngrams_words
+        if paper.abstract_ngrams_words is not None
+        else get_text_ngrams_words(paper.abstract_ngram_text, stopwords=None),
+        venue_ngrams=paper.venue_ngrams
+        if paper.venue_ngrams is not None
+        else get_text_ngrams(paper.venue_ngram_text, stopwords=None, use_bigrams=True),
+        author_info_coauthor_n_grams=paper.author_info_coauthor_n_grams
+        if paper.author_info_coauthor_n_grams is not None
+        else get_text_ngrams(paper.coauthor_ngram_text, stopwords=None, use_unigrams=True, use_bigrams=True),
+    )
+
+
+# Below this many papers, starting a process pool costs more than it saves: about 4 s on
+# Windows for a 1,500-paper request that preprocesses in under 1.5 s on one process. s2and
+# uses the same threshold for its parallel builds.
+PREPROCESS_POOL_MIN_PAPERS = 20000
 
 
 def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
@@ -1060,7 +1166,7 @@ def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
     papers_dict: Dict
         the papers dictionary
     n_jobs: int
-        how many cpus to use
+        how many cpus to use, for at least PREPROCESS_POOL_MIN_PAPERS papers
 
     Returns
     -------
@@ -1068,7 +1174,7 @@ def preprocess_papers_parallel(papers_dict: Dict, n_jobs: int) -> Dict:
     """
 
     output = {}
-    if n_jobs > 1:
+    if n_jobs > 1 and len(papers_dict) >= PREPROCESS_POOL_MIN_PAPERS:
         with multiprocessing.Pool(processes=n_jobs) as p:
             _max = len(papers_dict)
             with tqdm(total=_max, desc="Preprocessing papers") as pbar:

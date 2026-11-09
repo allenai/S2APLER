@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from s2apler.eval import b3_precision_recall_fscore
-from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize
-from s2apler.data import PDData
-from s2apler.consts import LARGE_INTEGER, DEFAULT_CHUNK_SIZE
+from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize, paper_featurizer
+from s2apler.data import PDData, condensed_offsets
+from s2apler.consts import LARGE_INTEGER
+from s2apler.native_scorer import scoring_classifier
+from s2and.thread_config import resolve_n_jobs
 
-from typing import Dict, Optional, Any, Union, List, Tuple
+from typing import Dict, Optional, Any, Union, List, Tuple, cast
 from collections import defaultdict
 import warnings
 from functools import partial
 from tqdm import tqdm
 import logging
 import copy
-import math
 
 import numpy as np
 from scipy.cluster.hierarchy import fcluster
@@ -29,6 +30,204 @@ from sklearn.exceptions import EfficiencyWarning
 logger = logging.getLogger("s2apler")
 
 
+def _split_null_title_papers(
+    block_dict: Dict[str, List[str]], dataset: PDData
+) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+    """Splits each block into titled papers, which the model clusters, and null-title papers.
+
+    Parameters
+    ----------
+    block_dict: Dict[str, List[str]]
+        block key to paper ids
+    dataset: PDData
+        the dataset, which supplies each paper's title
+
+    Returns
+    -------
+    Dict[str, List[str]]: titled paper ids per block, for blocks that have any
+    Dict[str, List[str]]: null-title paper ids per block, for blocks that have any
+    """
+    titled: Dict[str, List[str]] = defaultdict(list)
+    null_titled: Dict[str, List[str]] = defaultdict(list)
+    for block_key, paper_ids in block_dict.items():
+        for paper_id in paper_ids:
+            title = dataset.papers[paper_id].title
+            if title is None or len(title) == 0:
+                null_titled[block_key].append(paper_id)
+            else:
+                titled[block_key].append(paper_id)
+    return dict(titled), dict(null_titled)
+
+
+def _join_clusters_by_ids(
+    paper_ids: List[str],
+    labels: List[int],
+    dataset: PDData,
+    first_null_label: int,
+    join_titled: bool,
+) -> List[int]:
+    """Joins clusters whose papers share an identifier.
+
+    Titled papers join first, transitively, by union-find. That replaces an in-place label
+    remap that lost track of earlier joins and left clusters sharing an ID apart. Null-title
+    papers then join each other and attach to at most one titled cluster. They never bridge
+    two titled clusters: a title-less record often carries one item's DOI and a multi-item
+    PDF's hash, and bridging would merge distinct papers.
+
+    Parameters
+    ----------
+    paper_ids: List[str]
+        papers in the block, titled papers first
+    labels: List[int]
+        cluster label for each paper; titled papers' labels are below first_null_label,
+        and each null-title paper has its own label from first_null_label up
+    dataset: PDData
+        the dataset, which supplies each paper's identifiers
+    first_null_label: int
+        the smallest label given to a null-title paper
+    join_titled: bool
+        whether titled clusters sharing an identifier join each other
+
+    Returns
+    -------
+    List[int]: labels where each joined group takes its smallest label, and groups holding
+        only null-title papers are numbered from first_null_label in order of appearance
+    """
+    parent = {label: label for label in labels}
+    # A pair the cluster seeds disallow never joins, even through a shared identifier, so a
+    # split pinned by a seed stays split. Only seeds between papers of this block matter.
+    label_of = dict(zip(paper_ids, labels))
+    partners: Dict[str, List[str]] = {}
+    if dataset.cluster_seeds_disallow:
+        for paper_id, others in dataset._disallow_partners().items():
+            inside = [other for other in others if other in label_of]
+            if paper_id in label_of and inside:
+                partners[paper_id] = inside
+    seeded: Dict[int, List[str]] = defaultdict(list)
+    for paper_id in partners:
+        seeded[label_of[paper_id]].append(paper_id)
+
+    def find(label: int) -> int:
+        while parent[label] != label:
+            parent[label] = parent[parent[label]]
+            label = parent[label]
+        return label
+
+    def union(label_a: int, label_b: int, may_join_titled: bool):
+        root_a, root_b = find(label_a), find(label_b)
+        if root_a == root_b:
+            return
+        # A root below first_null_label means the group already holds a titled cluster.
+        if not may_join_titled and root_a < first_null_label and root_b < first_null_label:
+            return
+        if partners:
+            # Seeds are symmetric, so scanning the group with fewer seeded papers suffices.
+            fewer, more = sorted((root_a, root_b), key=lambda root: len(seeded.get(root, ())))
+            if any(find(label_of[other]) == more for paper_id in seeded.get(fewer, ()) for other in partners[paper_id]):
+                return
+        kept, merged = min(root_a, root_b), max(root_a, root_b)
+        parent[merged] = kept
+        if merged in seeded:
+            seeded[kept].extend(seeded.pop(merged))
+
+    # A join a seed refuses leaves several groups behind one key. Then try each, so a paper the
+    # first group refuses can still join another. Without seeds, retrying cannot change the
+    # result: a refused join means both groups hold titled clusters, as does every other
+    # group left behind the key.
+    groups_for_key: Dict[Tuple[str, str], List[int]] = {}
+    for paper_id, label in zip(paper_ids, labels):
+        is_titled = label < first_null_label
+        for key in dataset.id_merge_keys(paper_id):
+            earlier = groups_for_key.get(key, [])
+            for other in earlier:
+                union(other, label, may_join_titled=join_titled and is_titled)
+            if partners:
+                groups_for_key[key] = list(dict.fromkeys(find(group) for group in [*earlier, label]))
+            elif not earlier:
+                groups_for_key[key] = [label]
+
+    # Number null-only groups consecutively, as before, so unchanged clusters keep their keys.
+    renumbered: Dict[int, int] = {}
+    joined = []
+    for label in labels:
+        root = find(label)
+        if root >= first_null_label:
+            root = renumbered.setdefault(root, first_null_label + len(renumbered))
+        joined.append(root)
+    return joined
+
+
+def _supervision_by_block(
+    block_dict: Dict[str, List[str]], partial_supervision: Dict[Tuple[str, str], Union[int, float]]
+) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+    """Places partial supervision into blocks once, as condensed offsets and values.
+
+    distance_matrix_helper checks a pair in block order before the reverse order, so an entry
+    given in block order wins over one given in reverse.
+
+    Parameters
+    ----------
+    block_dict: Dict
+        block key to paper ids
+    partial_supervision: Dict
+        (paper id, paper id) to the value to use for that pair
+
+    Returns
+    -------
+    Dict: block key to (offsets, values) for the blocks with any supervised pair
+    """
+    if not partial_supervision:
+        return {}
+    places: Dict[str, List[Tuple[str, int]]] = defaultdict(list)
+    for block_key, papers in block_dict.items():
+        for k, paper_id in enumerate(papers):
+            places[paper_id].append((block_key, k))
+    found: Dict[str, Dict[int, Union[int, float]]] = defaultdict(dict)
+    for in_block_order in (False, True):
+        for (paper_a, paper_b), value in partial_supervision.items():
+            for block_key, i in places.get(paper_a, ()):
+                for other_key, j in places.get(paper_b, ()):
+                    if other_key != block_key or i == j or (i < j) != in_block_order:
+                        continue
+                    n = len(block_dict[block_key])
+                    found[block_key][int(condensed_offsets(np.array(min(i, j)), np.array(max(i, j)), n))] = value
+    return {
+        block_key: (np.fromiter(entries, dtype=np.int64), np.array(list(entries.values()), dtype=float))
+        for block_key, entries in found.items()
+    }
+
+
+def _condensed_pair_chunks(n: int, max_pairs: int):
+    """Yields an n-paper block's pairs in condensed order, a few rows of the matrix at a time.
+
+    Parameters
+    ----------
+    n: int
+        the number of papers in the block
+    max_pairs: int
+        the most pairs to yield at once, unless one row holds more
+
+    Yields
+    ------
+    (left, right, first_offset): paper indices of each pair, and the first pair's offset
+    """
+    row = 0
+    while row < n - 1:
+        # Row i holds the n - 1 - i pairs (i, j) with j > i.
+        end = row + 1
+        total = n - 1 - row
+        while end < n - 1 and total + (n - 1 - end) <= max_pairs:
+            total += n - 1 - end
+            end += 1
+        rows = np.arange(row, end)
+        counts = n - 1 - rows
+        left = np.repeat(rows, counts)
+        starts = np.repeat(np.cumsum(counts) - counts, counts)
+        right = left + 1 + (np.arange(total) - starts)
+        yield left, right, row * n - row * (row + 1) // 2
+        row = end
+
+
 class Clusterer:
     """
     A wrapper for learning a clusterer
@@ -41,7 +240,7 @@ class Clusterer:
         val_blocks_size: int
             How many blocks to use during hyperparam optimization.
             Defaults to None, which uses all of them.
-        cluster_model: sklearn compatible model
+        cluster_model: FastCluster
             Clusterer model
             Defaults to None, which uses FastCluster with average linking.
         search_space: Dict
@@ -51,18 +250,11 @@ class Clusterer:
             Number of hyperparameter evaluations
         n_jobs: int
             Parallelize each clusterer this many ways
-        use_cache: bool
-            Whether to use the cache when making distance matrices
         use_default_constraints_as_supervision: bool
             Whether to use the default constraints when constructing the distance matrices.
             These are high precision and can save a lot of compute/time.
         random_state: int
             Random state
-        nameless_classifier: sklearn compatible model
-            A second classifier which uses pairwise features excluding all name information, and
-            whose predictions are averaged with the main classifier. Won't be used if None
-        nameless_featurizer_info: FeaturizationInfo
-            The FeaturizationInfo for the second classifier. Won't be used if None
         dont_merge_cluster_seeds: bool
             this flag controls whether to use cluster seeds to enforce "dont merge"
             as well as "must merge" constraints
@@ -75,33 +267,32 @@ class Clusterer:
         featurizer_info: FeaturizationInfo,
         classifier: Any,
         val_blocks_size: Optional[int] = None,
-        cluster_model: Optional[Any] = None,
+        cluster_model: Optional[FastCluster] = None,
         search_space: Optional[Dict[str, Any]] = None,
         n_iter: int = 25,
         n_jobs: int = 16,
-        use_cache: bool = False,
+        # Keyword-only: removed parameters used to sit here, so old positional calls must fail.
+        *,
         use_default_constraints_as_supervision: bool = True,
         random_state: int = 42,
-        nameless_classifier: Optional[Any] = None,
-        nameless_featurizer_info: Optional[FeaturizationInfo] = None,
         dont_merge_cluster_seeds: bool = True,
         batch_size: int = 1000000,
     ):
         self.featurizer_info = featurizer_info
-        self.nameless_featurizer_info = nameless_featurizer_info
         self.classifier = copy.deepcopy(classifier)
-        self.nameless_classifier = copy.deepcopy(nameless_classifier)
         self.val_blocks_size = val_blocks_size
         self.n_iter = n_iter
         self.n_jobs = n_jobs
         self.random_state = random_state
-        self.use_cache = use_cache
         self.use_default_constraints_as_supervision = use_default_constraints_as_supervision
         self.dont_merge_cluster_seeds = dont_merge_cluster_seeds
         if cluster_model is None:
             self.cluster_model = FastCluster(linkage="average")
-        else:
+        elif isinstance(cluster_model, FastCluster):
             self.cluster_model = copy.deepcopy(cluster_model)
+        else:
+            # Distances are built as condensed vectors, which only FastCluster reads.
+            raise TypeError(f"cluster_model must be a FastCluster, got {type(cluster_model).__name__}")
 
         if search_space is None:
             self.search_space = {"eps": hp.uniform("eps", 0.2, 0.8)}
@@ -111,6 +302,22 @@ class Clusterer:
         self.hyperopt_trials_store: Optional[Union[Trials, List[Trials]]] = None
         self.best_params: Optional[Dict[Any, Any]] = None
         self.batch_size = batch_size
+
+    def _scorer(self, classifier: Any) -> Any:
+        """Returns what scores pairs for `classifier`: the native booster when it is exact.
+
+        Parameters
+        ----------
+        classifier: Any
+            the pairwise classifier
+
+        Returns
+        -------
+        Any: an object with `predict_proba`
+        """
+        # n_jobs below 1 follows scikit-learn (-1 is all CPUs); 0 runs on one thread.
+        num_threads = resolve_n_jobs(self.n_jobs) if self.n_jobs != 0 else 1
+        return scoring_classifier(classifier, num_threads)
 
     @staticmethod
     def filter_blocks(block_dict: Dict[str, List[str]], num_to_keep: Optional[int] = None) -> Dict[str, List[str]]:
@@ -193,11 +400,14 @@ class Clusterer:
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
         disable_tqdm: bool = False,
         incremental_dont_use_cluster_seeds: bool = False,
-    ) -> Dict[str, np.array]:
+    ) -> Dict[str, np.ndarray]:
         """
         Creates the distance matrices for the input blocks.
-        Note: This function is much more complicated than it needs to be in an
-        effort to reduce its memory footprint
+
+        Pairs are handled as arrays, not one Python object each: constraints come from
+        PDData.constraint_values, the native featurizer takes pair positions, and at most
+        batch_size pairs are featurized and scored at a time. The distances are the same as
+        building each pair with distance_matrix_helper, which stays as the reference.
 
         Parameters
         ----------
@@ -217,125 +427,127 @@ class Clusterer:
         Dict: the distance matrix dictionary, keyed by block key
         """
         logger.debug(f"Making {len(block_dict)} distance matrices")
-        logger.debug("Initializing pairwise_probas")
-        # initialize pairwise_probas with correctly size arrays
-        pairwise_probas = {}
-        num_pairs = 0
-        for block_key, paper_ids in block_dict.items():
-            block_size = len(paper_ids)
-            num_pairs += int(block_size * (block_size - 1) / 2)
-            if isinstance(self.cluster_model, FastCluster):
-                # flattened pdist style
-                pairwise_proba = np.zeros(int(block_size * (block_size - 1) / 2), dtype=np.float16)
-            else:
-                pairwise_proba = np.zeros((block_size, block_size), dtype=np.float16)
-            pairwise_probas[block_key] = pairwise_proba
+        paper_ids = list(dict.fromkeys(paper_id for papers in block_dict.values() for paper_id in papers))
+        position = {paper_id: i for i, paper_id in enumerate(paper_ids)}
+        num_threads = resolve_n_jobs(self.n_jobs) if self.n_jobs != 0 else 1
+        featurizer = None
+        # Scored pairs wait here until a batch is full: (distances, offsets, left, right).
+        pending: List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
+        pending_count = 0
 
-        logger.debug("Pairwise probas initialized, starting making all pairs")
-
-        # featurize and predict in batches
-        helper_output = self.distance_matrix_helper(
-            block_dict,
-            dataset,
-            partial_supervision,
-            incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
-        )
-
-        prev_block_key = ""
-        batch_num = 0
-        num_batches = math.ceil(num_pairs / self.batch_size)
-        while True:
-            logger.debug(f"Featurizing batch {batch_num}/{num_batches}")
-            count = 0
-            pairs = []
-            indices = []
-            blocks = []
-            logger.debug("Getting constraints")
-            # iterate over a batch_size number of pairs
-            for item in helper_output:
-                pairs.append(item[0])
-                indices.append(item[1])
-                blocks.append(item[2])
-                count += 1
-                if count == self.batch_size:
-                    break
-
-            if len(pairs) == 0:
-                break
-
-            batch_features, _, batch_nameless_features = many_pairs_featurize(
-                pairs,
-                dataset,
-                self.featurizer_info,
-                self.n_jobs,
-                use_cache=self.use_cache,
-                chunk_size=DEFAULT_CHUNK_SIZE,
-                nameless_featurizer_info=self.nameless_featurizer_info,
-            )
-            # get predictions where there isn't partial supervision
-            # and fill the rest with partial supervision
-            # undoing the offset by LARGE_INTEGER from above
-            logger.debug("Making predict flags")
-            batch_labels = np.array([i[2] for i in pairs])
-            predict_flag = np.isnan(batch_labels)
-            not_predict_flag = ~predict_flag
-            batch_predictions = np.zeros(len(batch_features))
+        def score_pending():
+            nonlocal featurizer, pending, pending_count
+            if featurizer is None:
+                featurizer = paper_featurizer(dataset.papers, paper_ids)
+            left = np.concatenate([item[2] for item in pending])
+            right = np.concatenate([item[3] for item in pending])
+            features = featurizer.featurize(left, right, num_threads=num_threads)
+            features = features[:, self.featurizer_info.indices_to_use]
             # index 0 is p(not the same)
-            logger.debug("Pairwise classification")
-            if np.any(predict_flag):
-                if self.nameless_classifier is not None:
-                    batch_predictions[predict_flag] = (
-                        self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
-                        + self.nameless_classifier.predict_proba(
-                            batch_nameless_features[predict_flag, :]  # type: ignore
-                        )[:, 0]
-                    ) / 2
-                else:
-                    batch_predictions[predict_flag] = self.classifier.predict_proba(batch_features[predict_flag, :])[
-                        :, 0
-                    ]
-            if np.any(not_predict_flag):
-                batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
+            probabilities = self._scorer(self.classifier).predict_proba(features)[:, 0]
+            start = 0
+            for distances, offsets, _, _ in pending:
+                distances[offsets] = probabilities[start : start + len(offsets)]
+                start += len(offsets)
+            pending, pending_count = [], 0
 
-            logger.debug("Starting to make matrices")
-            for within_batch_index, prediction in tqdm(
-                enumerate(batch_predictions),
-                total=len(batch_predictions),
-                desc="Writing matrices",
-                disable=disable_tqdm,
-            ):
-                block_key = blocks[within_batch_index]
-                if block_key != prev_block_key:
-                    block_key_start_index = blocks.index(block_key) + (batch_num * self.batch_size)
-                    pairwise_proba = pairwise_probas[block_key]
-
-                if isinstance(self.cluster_model, FastCluster):
-                    index = (batch_num * self.batch_size + within_batch_index) - block_key_start_index
-
-                    pairwise_proba[index] = prediction
-                else:
-                    i, j = indices[within_batch_index]
-                    pairwise_proba[i, j] = prediction
-
-                prev_block_key = block_key
-
-            if count < self.batch_size:
-                break
-
-            batch_num += 1
-
-        if not isinstance(self.cluster_model, FastCluster):
-            for pairwise_proba in pairwise_probas.values():
-                pairwise_proba += pairwise_proba.T
-                np.fill_diagonal(pairwise_proba, 0)
+        supervision = _supervision_by_block(block_dict, partial_supervision)
+        distance_matrices = {}
+        for block_key, papers in tqdm(block_dict.items(), desc="Making distance matrices", disable=disable_tqdm):
+            n = len(papers)
+            # flattened pdist style
+            distances = np.zeros(n * (n - 1) // 2, dtype=np.float16)
+            distance_matrices[block_key] = distances
+            block_positions = np.array([position[paper_id] for paper_id in papers], dtype=np.uint32)
+            pair_rules = dataset.block_pair_rules(papers) if self.use_default_constraints_as_supervision else None
+            for left, right, first_offset in _condensed_pair_chunks(n, self.batch_size):
+                labels = self._pair_labels(
+                    papers,
+                    left,
+                    right,
+                    first_offset,
+                    dataset,
+                    supervision.get(block_key),
+                    incremental_dont_use_cluster_seeds,
+                    pair_rules,
+                )
+                offsets = np.arange(first_offset, first_offset + len(left))
+                fixed = ~np.isnan(labels)
+                # The same arithmetic as the per-pair path, which offset labels by LARGE_INTEGER.
+                distances[offsets[fixed]] = (labels[fixed] - LARGE_INTEGER) + LARGE_INTEGER
+                scored = ~fixed
+                if np.any(scored):
+                    pending.append(
+                        (distances, offsets[scored], block_positions[left[scored]], block_positions[right[scored]])
+                    )
+                    pending_count += int(np.count_nonzero(scored))
+                if pending_count >= self.batch_size:
+                    score_pending()
+        if pending:
+            score_pending()
 
         logger.debug(f"{len(block_dict)} distance matrices made")
-        return pairwise_probas
+        return distance_matrices
+
+    def _pair_labels(
+        self,
+        papers: List[str],
+        left: np.ndarray,
+        right: np.ndarray,
+        first_offset: int,
+        dataset: PDData,
+        supervision: Optional[Tuple[np.ndarray, np.ndarray]],
+        incremental_dont_use_cluster_seeds: bool,
+        pair_rules: Optional[Tuple[np.ndarray, np.ndarray]],
+    ) -> np.ndarray:
+        """Labels for pairs of one block, as distance_matrix_helper gives them, without its offset.
+
+        Parameters
+        ----------
+        papers: List[str]
+            the block's paper ids
+        left: np.ndarray
+            the first paper of each pair, as an index into papers
+        right: np.ndarray
+            the second paper of each pair
+        first_offset: int
+            the condensed offset of the first pair
+        dataset: PDData
+            the dataset
+        supervision: Tuple[np.ndarray, np.ndarray]
+            the block's partial supervision from _supervision_by_block, or None
+        incremental_dont_use_cluster_seeds: bool
+            whether to ignore the dataset's cluster seeds
+        pair_rules: Tuple[np.ndarray, np.ndarray]
+            dataset.block_pair_rules for the block
+
+        Returns
+        -------
+        np.ndarray: each pair's partial supervision or constraint value, NaN where neither applies
+        """
+        if self.use_default_constraints_as_supervision:
+            labels = dataset.constraint_values(
+                papers,
+                left,
+                right,
+                first_offset,
+                dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
+                incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
+                pair_rules=pair_rules,
+            )
+        else:
+            labels = np.full(len(left), np.nan)
+        if supervision is not None:
+            # Partial supervision overrides constraints.
+            offsets, values = supervision
+            in_chunk = (offsets >= first_offset) & (offsets < first_offset + len(labels))
+            labels[offsets[in_chunk] - first_offset] = values[in_chunk]
+        return labels
 
     def fit(
         self,
         datasets: Union[PDData, List[PDData]],
-        val_dists_precomputed: Dict[str, Dict[str, np.array]] = None,
+        val_dists_precomputed: Optional[Dict[str, Dict[str, np.ndarray]]] = None,
         metric_for_hyperopt: str = "b3",
     ) -> Clusterer:
         """
@@ -364,13 +576,8 @@ class Clusterer:
         weights = []
         for dataset in datasets:
             # blocks
-            train_block_dict, val_block_dict, _ = dataset.split_cluster_papers()
-            # incremental setting uses all the paper_ids in train and val
-            # block-wise split uses only validation set for building the clustering model
-            if dataset.unit_of_data_split == "time" or dataset.unit_of_data_split == "papers":
-                for block_key, paper_ids in train_block_dict.items():
-                    if block_key in val_block_dict:
-                        val_block_dict[block_key].extend(paper_ids)
+            # the block-wise split uses only the validation blocks to fit the clustering model
+            _, val_block_dict, _ = dataset.split_cluster_papers()
 
             # we don't need val blocks with only a single element
             val_block_dict = self.filter_blocks(val_block_dict, self.val_blocks_size)
@@ -382,7 +589,9 @@ class Clusterer:
 
             # distance matrix
             if val_dists_precomputed is None:
-                val_dists = self.make_distance_matrices(val_block_dict, dataset)
+                # predict clusters titled papers only, so its distances must cover exactly those.
+                titled_val_block_dict, _ = _split_null_title_papers(val_block_dict, dataset)
+                val_dists = self.make_distance_matrices(titled_val_block_dict, dataset)
             else:
                 val_dists = val_dists_precomputed[dataset.name]
             val_dists_list.append(val_dists)
@@ -394,10 +603,11 @@ class Clusterer:
             self.set_params(params)
             f1s = []
             ratios = []
-            for val_block_dict, val_cluster_to_papers, val_dists in zip(
-                val_block_dict_list, val_cluster_to_papers_list, val_dists_list
+            for dataset, val_block_dict, val_cluster_to_papers, val_dists in zip(
+                datasets, val_block_dict_list, val_cluster_to_papers_list, val_dists_list
             ):
-                pred_clusters, _ = self.predict(val_block_dict, dataset=None, dists=val_dists)
+                # predict reads paper titles to set aside null-title papers, so it needs the dataset.
+                pred_clusters, _ = self.predict(val_block_dict, dataset=dataset, dists=val_dists)
                 (
                     _,
                     _,
@@ -421,7 +631,8 @@ class Clusterer:
             algo=partial(tpe.suggest, n_startup_jobs=5),
             max_evals=self.n_iter,
             trials=self.hyperopt_trials_store,
-            rstate=np.random.RandomState(self.random_state),
+            # hyperopt calls rstate.integers, which only numpy Generators have.
+            rstate=np.random.default_rng(self.random_state),
         )
         # hyperopt has some problems with hp.choice so we need to do this:
         best_params = space_eval(self.search_space, self.hyperopt_trials_store.argmin)
@@ -457,7 +668,7 @@ class Clusterer:
         self,
         block_dict: Dict[str, List[str]],
         dataset: PDData,
-        dists: Optional[Dict[str, np.array]] = None,
+        dists: Optional[Dict[str, np.ndarray]] = None,
         cluster_model_params: Optional[Dict[str, Any]] = None,
         partial_supervision: Dict[Tuple[str, str], Union[int, float]] = {},
         use_s2_clusters: bool = False,
@@ -502,16 +713,8 @@ class Clusterer:
             return dict(pred_clusters), dists
 
         # we need to remove all the null titles from the block_dict and then reattach them later
-        block_dict_no_null_titles = defaultdict(list)
-        block_dict_null_titles = defaultdict(list)
-        for block_key, paper_ids in block_dict.items():
-            for paper_id in paper_ids:
-                title = dataset.papers[paper_id].title
-                if title is None or len(title) == 0:
-                    block_dict_null_titles[block_key].append(paper_id)
-                else:
-                    block_dict_no_null_titles[block_key].append(paper_id)
-        block_dict = dict(block_dict_no_null_titles)
+        block_dict_no_null_titles, block_dict_null_titles = _split_null_title_papers(block_dict, dataset)
+        block_dict = block_dict_no_null_titles
 
         if dists is None:
             dists = self.make_distance_matrices(
@@ -521,95 +724,46 @@ class Clusterer:
                 incremental_dont_use_cluster_seeds=incremental_dont_use_cluster_seeds,
             )
 
-        for block_key in block_dict.keys():
-            if block_key in dists and len(block_dict[block_key]) > 1:
+        # Walk every input block, not just blocks with titled papers: a block whose papers all
+        # lack titles used to vanish from the output.
+        all_block_keys = list(dict.fromkeys(list(block_dict_no_null_titles) + list(block_dict_null_titles)))
+        for block_key in all_block_keys:
+            titled_paper_ids = block_dict.get(block_key, [])
+            if len(titled_paper_ids) > 1:
+                if block_key not in dists:
+                    raise ValueError(f"No distance matrix for block {block_key!r} with {len(titled_paper_ids)} papers")
+                # Distances are read by position, so a matrix built over other papers mislabels silently.
+                n = len(titled_paper_ids)
+                expected_shape = (n * (n - 1) // 2,)
+                if dists[block_key].shape != expected_shape:
+                    raise ValueError(
+                        f"Distance matrix for block {block_key!r} has shape {dists[block_key].shape}, "
+                        f"expected {expected_shape} for its {n} titled papers"
+                    )
                 cluster_model = self.set_params(cluster_model_params, clone_flag=True)
                 with warnings.catch_warnings():
                     # annoying sparse matrix not sorted warning
                     warnings.simplefilter("ignore", category=EfficiencyWarning)
                     cluster_model.fit(dists[block_key])
-                labels = cluster_model.labels_
-                # in HDBSCAN the labels of -1 are actually "outliers"
-                # each of these gets its own label starting at
-                # max label + 1 and going up
-                max_label = labels.max()
-                negative_one_label_locations = np.where(labels == -1)[0]
-                for i, loc in enumerate(negative_one_label_locations):
-                    labels[loc] = max_label + 1 + i
-
-                if self.use_default_constraints_as_supervision:
-                    # at this point it is possible that clusters that have overlapping
-                    # dois, pdf_hashes or pmids are STILL not joined together
-                    # due to the 0 enforced distance not being enough to outweigh
-                    # a lot of large distances. so we manually go through the clusters
-                    # find which ones overlap according to ANY of the ids, and join them
-                    inverse_id_map = defaultdict(list)
-                    for paper_id, label in zip(block_dict[block_key], labels):
-                        if dataset.papers[paper_id].doi is not None:
-                            inverse_id_map[dataset.papers[paper_id].doi].append(label)
-                        if dataset.papers[paper_id].pdf_hash is not None:
-                            inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
-                        if dataset.papers[paper_id].pmid is not None:
-                            inverse_id_map[dataset.papers[paper_id].pmid].append(label)
-                        if dataset.papers[paper_id].arxiv_id is not None:
-                            inverse_id_map[dataset.papers[paper_id].arxiv_id].append(label)
-
-                    # now join any clusters that have overlapping ids
-                    # this is a tad tricky because as we merge clusters, we need to
-                    # keep track of where they are going
-                    to_join_sets = [sorted(val) for val in inverse_id_map.values() if len(val) > 1]
-                    mapped_labels = {label: label for label in labels}
-                    labels = np.array(labels)
-                    for join_set in to_join_sets:
-                        for other_label in join_set[1:]:
-                            labels[labels == mapped_labels[other_label]] = mapped_labels[join_set[0]]
-                            mapped_labels[other_label] = mapped_labels[join_set[0]]
-                    labels = list(labels)
+                labels = [int(label) for label in cluster_model.labels_]
             else:
-                labels = [0]
-                max_label = 0
+                labels = [0] * len(titled_paper_ids)
 
-            # now we can rejoin the null titles based only on the ids
-            paper_ids_for_nulls = block_dict_null_titles.get(block_key, [])
-            if len(paper_ids_for_nulls) > 0:
-                # first we compute a map from various ids to the labels
-                # have to do this again because we reassigned labels above
-                # when joining clusters based on IDs
-                inverse_id_map = defaultdict(list)
-                for paper_id, label in zip(block_dict[block_key], labels):
-                    if dataset.papers[paper_id].doi is not None:
-                        inverse_id_map[dataset.papers[paper_id].doi].append(label)
-                    if dataset.papers[paper_id].pdf_hash is not None:
-                        inverse_id_map[dataset.papers[paper_id].pdf_hash].append(label)
-                    if dataset.papers[paper_id].pmid is not None:
-                        inverse_id_map[dataset.papers[paper_id].pmid].append(label)
-                    if dataset.papers[paper_id].arxiv_id is not None:
-                        inverse_id_map[dataset.papers[paper_id].arxiv_id].append(label)
+            # Null-title papers skip the model; each starts as a singleton and joins others by ID.
+            null_title_paper_ids = block_dict_null_titles.get(block_key, [])
+            next_label = max(labels, default=-1) + 1
+            paper_ids_for_block = titled_paper_ids + null_title_paper_ids
+            labels = labels + list(range(next_label, next_label + len(null_title_paper_ids)))
 
-                labels_for_nulls = []
-                for paper_id in paper_ids_for_nulls:
-                    # look up each of the ids of the null title papers in the inverse_id_map
-                    # and assign them the label of the first one we find
-                    doi = dataset.papers[paper_id].doi
-                    pmid = dataset.papers[paper_id].pmid
-                    pdf_hash = dataset.papers[paper_id].pdf_hash
-                    arxiv_id = dataset.papers[paper_id].arxiv_id
-                    if doi is not None and doi in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[doi][0])
-                    elif pmid is not None and pmid in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[pmid][0])
-                    elif pdf_hash is not None and pdf_hash in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[pdf_hash][0])
-                    elif arxiv_id is not None and arxiv_id in inverse_id_map:
-                        labels_for_nulls.append(inverse_id_map[arxiv_id][0])
-                    else:
-                        max_label += 1
-                        labels_for_nulls.append(max_label)
-
-                paper_ids_for_block = block_dict[block_key] + paper_ids_for_nulls
-                labels = labels + labels_for_nulls
-            else:
-                paper_ids_for_block = block_dict[block_key]
+            # The enforced 0 distance can lose to many large distances under average linkage,
+            # so clusters sharing a DOI, PMID, usable pdf_hash or arXiv id are joined explicitly here.
+            labels = _join_clusters_by_ids(
+                paper_ids_for_block,
+                labels,
+                dataset,
+                first_null_label=next_label,
+                join_titled=self.use_default_constraints_as_supervision,
+            )
 
             for paper_id, label in zip(paper_ids_for_block, labels):
                 pred_clusters[str(block_key) + "_" + str(label)].append(paper_id)
@@ -694,15 +848,7 @@ class Clusterer:
                         label = value - LARGE_INTEGER
                 all_pairs.append((unassigned_paper, paper_id, label))
 
-        batch_features, _, batch_nameless_features = many_pairs_featurize(
-            all_pairs,
-            dataset,
-            self.featurizer_info,
-            self.n_jobs,
-            use_cache=self.use_cache,
-            chunk_size=DEFAULT_CHUNK_SIZE,
-            nameless_featurizer_info=self.nameless_featurizer_info,
-        )
+        batch_features, _ = many_pairs_featurize(all_pairs, dataset, self.featurizer_info, self.n_jobs)
 
         # get predictions where there isn't partial supervision
         # and fill the rest with partial supervision
@@ -715,15 +861,9 @@ class Clusterer:
         # index 0 is p(not the same)
         logger.debug("Pairwise classification")
         if np.any(predict_flag):
-            if self.nameless_classifier is not None:
-                batch_predictions[predict_flag] = (
-                    self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
-                    + self.nameless_classifier.predict_proba(batch_nameless_features[predict_flag, :])[  # type: ignore
-                        :, 0
-                    ]
-                ) / 2
-            else:
-                batch_predictions[predict_flag] = self.classifier.predict_proba(batch_features[predict_flag, :])[:, 0]
+            batch_predictions[predict_flag] = self._scorer(self.classifier).predict_proba(
+                batch_features[predict_flag, :]
+            )[:, 0]
         if np.any(not_predict_flag):
             batch_predictions[not_predict_flag] = batch_labels[not_predict_flag] + LARGE_INTEGER
 
@@ -733,8 +873,6 @@ class Clusterer:
         )
         for papers_pair, dist in zip(all_pairs, batch_predictions):
             unassigned_paper, assigned_paper, _ = papers_pair
-            if assigned_paper not in cluster_seeds_require:
-                continue
             cluster_id = cluster_seeds_require[assigned_paper]
             previous_average, previous_count = papers_to_cluster_to_average_dist[unassigned_paper][cluster_id]
             papers_to_cluster_to_average_dist[unassigned_paper][cluster_id] = (
@@ -759,13 +897,9 @@ class Clusterer:
                     best_dist = average_dist
             if best_cluster_id is not None:
                 # undo the reclustering step
-                new_name_disallowed = False
                 if best_cluster_id in recluster_map:
-                    best_cluster_id = recluster_map[best_cluster_id]  # type: ignore
-                if new_name_disallowed:
-                    singleton_papers.append(unassigned_paper)
-                else:
-                    pred_clusters[f"{best_cluster_id}"].append(unassigned_paper)
+                    best_cluster_id = recluster_map[best_cluster_id]
+                pred_clusters[f"{best_cluster_id}"].append(unassigned_paper)
             else:
                 singleton_papers.append(unassigned_paper)
 
@@ -791,9 +925,6 @@ class PairwiseModeler:
     search_space: Dict:
             A hyperopt search space for hyperparam optimization.
             Defaults to an appropriate LGBMClassifier space if not specified.
-    monotone_constraints: string
-            Monotonic constraints for lightbm only.
-            Defaults to None and is not used.
     n_iter: int
         Number of iterations for hyperparam optimization.
     n_jobs: int
@@ -807,7 +938,6 @@ class PairwiseModeler:
         self,
         estimator: Optional[Any] = None,
         search_space: Optional[Dict[str, Any]] = None,
-        monotone_constraints: Optional[str] = None,
         n_iter: int = 50,
         n_jobs: int = 16,  # for the model, not the hyperopt
         random_state: int = 42,
@@ -841,12 +971,6 @@ class PairwiseModeler:
         else:
             self.search_space = search_space
 
-        self.monotone_constraints = monotone_constraints
-        if self.monotone_constraints is not None and isinstance(self.estimator, lgb.LGBMClassifier):
-            self.estimator.set_params(monotone_constraints=self.monotone_constraints)
-            self.estimator.set_params(monotone_constraints_method="advanced")
-            self.search_space["monotone_penalty"] = hp.uniform("monotone_penalty", 0, 5)
-
         self.n_iter = n_iter
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -860,7 +984,7 @@ class PairwiseModeler:
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-    ) -> Trials:
+    ) -> Optional[Trials]:
         """
         Fits the classifier
 
@@ -885,7 +1009,7 @@ class PairwiseModeler:
                 params = {k: intify(v) for k, v in params.items()}
                 self.estimator.set_params(**params)
                 self.estimator.fit(X_train, y_train)
-                y_pred_proba = self.estimator.predict_proba(X_val)[:, 1]
+                y_pred_proba = np.asarray(self.estimator.predict_proba(X_val))[:, 1]
                 return -precision_recall_fscore_support(y_val, y_pred_proba > 0.5, beta=1.0, average="macro")[2]
 
             self.hyperopt_trials_store = Trials()
@@ -902,7 +1026,8 @@ class PairwiseModeler:
             self.estimator.set_params(**self.best_params)
         else:
             self.best_params = {}
-            self.hyperopt_trials_store == {}
+            # No search ran, so drop trials from any earlier fit (this was a no-op comparison).
+            self.hyperopt_trials_store = None
 
         # refitting but only on training data so as not to leak anything
         self.classifier = self.estimator.fit(X_train, y_train)
@@ -912,111 +1037,6 @@ class PairwiseModeler:
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         assert self.classifier is not None, "You need to call fit first"
         return self.classifier.predict_proba(X)
-
-
-class VotingClassifier:
-    """
-    Stripped-down version of VotingClassifier that uses prefit estimators
-
-    Parameters
-    ----------
-    estimators: List[sklearn classifier]
-        A list of sklearn classifiers that support predict_proba.
-    voting: string
-        Type of voting.
-        Defaults to "hard", can also be "soft".
-        "soft" means "take the highest average probability class" and
-        "hard" means "take the class that the plurality of the models pick"
-    weights: List or np.array
-        Weights for each estimator.
-    """
-
-    def __init__(self, estimators, voting="soft", weights=None):
-        self.estimators = estimators
-        self.voting = voting
-        self.weights = weights
-
-    def fit(self, X, y, sample_weight=None):
-        raise NotImplementedError
-
-    def predict(self, X):
-        """
-        Predict class labels for X.
-
-        Parameters
-        ----------
-        X: {array-like, sparse matrix}, shape = [n_samples, n_features]
-            Training vectors, where n_samples is the number of samples and
-            n_features is the number of features.
-
-        Returns
-        -------
-        predictions : array-like, shape = [n_samples]
-            Predicted class labels.
-        """
-        if self.voting == "soft":
-            predictions = np.argmax(self.predict_proba(X), axis=1)
-        elif self.voting == "hard":
-            predictions = np.apply_along_axis(
-                lambda x: np.argmax(np.bincount(x, weights=self.weights)),
-                axis=1,
-                arr=self._predict(X).astype("int"),
-            )
-        else:
-            raise Exception("Voting type must be one of 'soft' or 'hard'")
-        return predictions
-
-    def _collect_probas(self, X):
-        """Collect results from clf.predict calls."""
-        return np.asarray([clf.predict_proba(X) for clf in self.estimators])
-
-    def predict_proba(self, X):
-        """
-        Compute probabilities of possible outcomes for samples in X.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape = [n_samples, n_features]
-            Training vectors, where n_samples is the number of samples and
-            n_features is the number of features.
-
-        Returns
-        ----------
-        avg : array-like, shape = [n_samples, n_classes]
-            Weighted average probability for each class per sample.
-        """
-        if self.voting == "hard":
-            raise AttributeError("predict_proba is not available when" " voting=%r" % self.voting)
-        avg = np.average(self._collect_probas(X), axis=0, weights=self.weights)
-        return avg
-
-    def transform(self, X):
-        """
-        Return class labels or probabilities for X for each estimator.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape = [n_samples, n_features]
-            Training vectors, where n_samples is the number of samples and
-            n_features is the number of features.
-
-        Returns
-        -------
-        If `voting='soft'`:
-          array-like = [n_classifiers, n_samples, n_classes]
-            Class probabilities calculated by each classifier.
-        If `voting='hard'`:
-          array-like = [n_samples, n_classifiers]
-            Class labels predicted by each classifier.
-        """
-        if self.voting == "soft":
-            return self._collect_probas(X)
-        else:
-            return self._predict(X)
-
-    def _predict(self, X):
-        """Collect results from clf.predict calls."""
-        return np.asarray([clf.predict(X) for clf in self.estimators]).T
 
 
 def intify(x):
@@ -1080,12 +1100,12 @@ class FastCluster(TransformerMixin, BaseEstimator):
         self.input_as_observation_matrix = input_as_observation_matrix
         self.labels_ = None
 
-    def fit(self, X: np.array) -> np.array:
+    def fit(self, X: np.ndarray) -> "FastCluster":
         """
         Fit the estimator on input data. The results are stored in self.labels_.
         Parameters
         ----------
-        X: np.array
+        X: np.ndarray
             The input may be either a 1-D condensed distance matrix
             or a 2-D array of observation vectors. If X is a 1-D condensed distance
             matrix, then it must be (N choose 2) sized vector, where N is the number
@@ -1112,22 +1132,25 @@ class FastCluster(TransformerMixin, BaseEstimator):
         self.labels_ = fcluster(Z, t=self.eps, criterion="distance")
         return self
 
-    def fit_transform(self, X: np.array) -> np.array:
+    def fit_transform(self, X: np.ndarray, y: Any = None, **fit_params: Any) -> np.ndarray:
         """
         Fit the estimator on input data, and returns results.
         Parameters
         ----------
-        X: np.array
+        X: np.ndarray
             The input may be either a 1-D condensed distance matrix
             or a 2-D array of observation vectors. If X is a 1-D condensed distance
             matrix, then it must be (N choose 2) sized vector, where N is the number
             of original observations paired in the distance matrix.
+        y: Any
+            ignored; present for scikit-learn API compatibility
+        **fit_params: Any
+            ignored; present for scikit-learn API compatibility
         Returns
         -------
-        np.array: A N-length array of clustering labels.
+        np.ndarray: A N-length array of clustering labels.
         """
-        self.fit(X)
-        return self.labels_
+        return cast(np.ndarray, self.fit(X).labels_)
 
-    def transform(self, X: np.array):
+    def transform(self, X: np.ndarray):
         raise Exception("FastCluster has no inductive mode. Use 'fit' or 'fit_transform' instead.")

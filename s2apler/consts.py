@@ -1,5 +1,4 @@
 import numpy as np
-from pathlib import Path
 import s2apler
 import os
 import json
@@ -13,27 +12,26 @@ PROJECT_ROOT_PATH = os.path.abspath(os.path.join(package_dir, os.pardir))
 # load up the path_configs and check if they are set
 CONFIG_LOCATION = os.path.join(PROJECT_ROOT_PATH, "data", "path_config.json")
 
-try:
+DEFAULT_DATA_DIR = os.path.join(PROJECT_ROOT_PATH, "data")
+UNSET_DATA_DIR = "absolute path of wherever you downloaded the data to"
+
+# An installed wheel has no data/path_config.json: the data directory sits next to the
+# package only in a checkout. Import must not create or require it, because installs can be
+# read-only and inference (TIMO) passes its own artifacts directory.
+CONFIG: dict = {}
+if os.path.exists(CONFIG_LOCATION):
     with open(CONFIG_LOCATION) as _json_file:
         CONFIG = json.load(_json_file)
 
-    if CONFIG["main_data_dir"] == "absolute path of wherever you downloaded the data to":
+if CONFIG.get("main_data_dir", UNSET_DATA_DIR) == UNSET_DATA_DIR:
+    if os.path.exists(CONFIG_LOCATION):
         logger.warning(
             "You haven't set `main_data_dir` in data/path_config.json! Using data/ as default data directory."
         )
-        CONFIG["main_data_dir"] = os.path.join(PROJECT_ROOT_PATH, "data")
-except Exception as e:
-    # make the data directory
-    print(f"Could not load config with eception {e}. Creating data directory.")
-    os.makedirs(os.path.join(PROJECT_ROOT_PATH, "data"), exist_ok=True)
-    CONFIG = {}
-    CONFIG["main_data_dir"] = os.path.join(PROJECT_ROOT_PATH, "data")
-
-assert os.path.exists(CONFIG["main_data_dir"]), "The `main_data_dir` specified in data/path_config.json doesn't exist."
-
-# feature caching related consts
-CACHE_ROOT = Path(os.getenv("S2APLER_CACHE", str(Path.home() / ".s2apler")))
-FEATURIZER_VERSION = 1
+    CONFIG["main_data_dir"] = DEFAULT_DATA_DIR
+elif not os.path.exists(CONFIG["main_data_dir"]):
+    # Only an explicitly configured directory must exist; catch typos at import.
+    raise FileNotFoundError(f"The `main_data_dir` in data/path_config.json doesn't exist: {CONFIG['main_data_dir']}")
 
 # important constant values
 NUMPY_NAN = np.nan

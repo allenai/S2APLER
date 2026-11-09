@@ -1,10 +1,15 @@
+[build-system]
+requires = ["maturin>=1.14.1,<2"]
+build-backend = "maturin"
+
 [project]
 name = "s2apler"
-version = "0.2.7"
+version = "0.4.0"
 description = "S2APLER: Semantic Scholar (S2) Agglomeration of Papers with Low Error Rate"
 readme = "README.md"
-requires-python = ">=3.8"
-license = { text = "Apache-2.0" }
+requires-python = ">=3.11,<3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE", "s2apler_rust/THIRD_PARTY_NOTICES.md"]
 authors = [
     { name = "Allen Institute for Artificial Intelligence" }
 ]
@@ -12,42 +17,48 @@ keywords = ["clustering", "papers", "semantic-scholar", "machine-learning"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 dependencies = [
-    "numpy>=1.23.4,<2",
-    "scikit-learn>=1.1.3",
+    # s2and supplies the native LightGBM scorer and sets the numeric stack versions below.
+    "s2and==1.0.0b8",
+    "numpy>=2,<2.3",
+    "scikit-learn==1.9.0",
     "text-unidecode==1.3",
-    "requests==2.28.1",
-    "hyperopt==0.2.7",
-    "pandas==1.5.1",
-    "lightgbm>=3.3.5",
-    "fastcluster==1.2.6",
-    "shap==0.41.0",
-    "matplotlib>=3.6.2",
-    "seaborn==0.12.1",
-    "tqdm==4.64.1",
-    "jellyfish==0.9.0",
+    "hyperopt==0.3.0",
+    "pandas>=2.2.2,<3",
+    "lightgbm==4.7.0",
+    "fastcluster>=1.3,<2",
+    "shap>=0.51,<1",
+    "matplotlib>=3.11.1,<4",
+    "seaborn>=0.12,<0.14",
+    "tqdm>=4.69,<5",
+    "jellyfish>=1.2.1,<2",
     "pylatexenc==2.10",
     "awscli>=1.27.12",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest==7.2.0",
-    "pytest-cov==4.0.0",
-    "flake8==5.0.4",
-    "black==22.10",
-    "click==8.0.4",
-    "mypy==0.991",
+    # Test stack
+    "pytest==9.1.1",
+    "pytest-cov>=7.1,<8",
+    "pytest-xdist>=3.8,<4",
+    # The release workflow test reads the workflow YAML.
+    "pyyaml>=6.0.3,<7",
+    # TIMO's interface models
     "pydantic==1.10.2",
+    # Type checking
+    "ty==0.0.99",
+    # Linters/formatters
+    "ruff==0.15.22",
+    # Local Rust extension build tooling
+    "maturin>=1.14.1",
 ]
 
 [project.urls]
@@ -55,48 +66,74 @@ Homepage = "https://github.com/allenai/S2APLER"
 Repository = "https://github.com/allenai/S2APLER"
 Issues = "https://github.com/allenai/S2APLER/issues"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["s2apler"]
+[tool.maturin]
+manifest-path = "s2apler_rust/Cargo.toml"
+bindings = "pyo3"
+python-source = "."
+module-name = "s2apler._s2apler_rust"
+include = [{ path = "VERSION", format = "sdist" }]
 
 [tool.uv]
-dev-dependencies = [
-    "pytest==7.2.0",
-    "pytest-cov==4.0.0",
-    "flake8==5.0.4",
-    "black==22.10",
-    "click==8.0.4",
-    "mypy==0.991",
-    "pydantic==1.10.2",
+# Rebuild the native extension when any of its inputs change.
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "s2apler_rust/Cargo.toml" },
+  { file = "s2apler_rust/Cargo.lock" },
+  { file = "s2apler_rust/build.rs" },
+  { file = "s2apler_rust/src/**/*.rs" },
+  # Include packaged licenses so notice-only edits refresh cached distributions.
+  { file = "LICENSE" },
+  { file = "s2apler_rust/THIRD_PARTY_NOTICES.md" },
 ]
 
-[tool.black]
+[tool.ruff]
 line-length = 120
-target-version = ["py38"]
-include = '\.pyi?$'
+target-version = "py311"
+# flake8 never checked the exploratory notebooks.
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+# flake8's default rule families: pycodestyle errors and warnings, and pyflakes.
+select = ["E", "W", "F"]
+
+# Carried over from .flake8.
+[tool.ruff.lint.per-file-ignores]
+"s2apler/__init__.py" = ["F401"]
+"s2apler/**/__init__.py" = ["F401", "E501"]
+# TIMO's interface and integration test carry long descriptions and request fixtures.
+"s2apler/timo/**" = ["E501"]
+# Scripts edit sys.path before imports and print long lines.
+"scripts/**" = ["E501", "E402"]
 
 [tool.pytest.ini_options]
+minversion = "7.0"
 testpaths = ["tests"]
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
-addopts = "-v --cov=s2apler --cov-report=term-missing"
+addopts = ["--strict-config", "--strict-markers", "-ra"]
 
-[tool.mypy]
-python_version = "3.8"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false
-ignore_missing_imports = true
+# ty defaults match the GitHub Linux CI runners; CLI flags still override them.
+[tool.ty.environment]
+python-version = "3.11"
+python-platform = "linux"
+
+[tool.ty.src]
+include = ["s2apler", "tests"]
+
+[[tool.ty.overrides]]
+# timo_interface exists only inside the TIMO harness that runs this integration test.
+include = ["s2apler/timo/integration_test.py"]
+
+[tool.ty.overrides.rules]
+import-not-found = "ignore"
 
 [tool.coverage.run]
 source = ["s2apler"]
 omit = ["*/tests/*", "*/test_*.py"]
+# pytest-cov 7 delegates subprocess measurement to coverage.py.
+patch = ["subprocess"]
 
 [tool.coverage.report]
+# Matches the floor the Docker CI enforced.
+fail_under = 40
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

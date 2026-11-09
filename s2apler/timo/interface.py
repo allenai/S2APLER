@@ -132,7 +132,9 @@ class Predictor:
         self.clusterer.use_default_constraints_as_supervision = self._config.use_default_constraints_as_supervision
         self.clusterer.dont_merge_cluster_seeds = self._config.dont_merge_cluster_seeds
         self.clusterer.n_jobs = self._config.n_jobs
-        self.clusterer.classifier.n_job = self._config.n_jobs
+        # The Clusterer scores with s2and's native booster, using n_jobs threads. Converting the
+        # model takes a moment, so do it now rather than on the first request.
+        self.clusterer._scorer(self.clusterer.classifier)
 
     def predict_one(self, instance: Instance) -> Prediction:
         """
@@ -146,7 +148,10 @@ class Predictor:
             mode="inference",
             n_jobs=self._config.n_jobs,
         )
-        if instance.cluster_seeds:
+        # Incremental mode extends the clusters that "require" seeds define; without any, it
+        # returned no clusters at all. Seeds that only disallow pairs keep the normal path, which
+        # applies them as constraints.
+        if dataset.cluster_seeds_require:
             out = self.clusterer.predict_incremental(dataset.papers, dataset)
         else:
             out = self.clusterer.predict(dataset.get_blocks(), dataset)[0]
