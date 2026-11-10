@@ -144,9 +144,14 @@ RE_ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
 RE_ARXIV_VERSION = re.compile(r"v\d+$", re.IGNORECASE)
 
 
-def _normalize_arxiv_id(arxiv_id: Optional[str]) -> Optional[str]:
-    """Lowercase and strip a trailing version suffix (e.g. '2512.13961v2' -> '2512.13961')."""
-    if not arxiv_id:
+def _normalize_arxiv_id(arxiv_id: Any) -> Optional[str]:
+    """Lowercase and strip a trailing version suffix (e.g. '2512.13961v2' -> '2512.13961').
+
+    JSON input can hold a number. A float has lost trailing zeros ('2101.10000' reads as
+    2101.1), so only a string or an int yields an id."""
+    if isinstance(arxiv_id, int) and not isinstance(arxiv_id, bool):
+        arxiv_id = str(arxiv_id)
+    if not isinstance(arxiv_id, str) or not arxiv_id:
         return None
     normalized = RE_ARXIV_VERSION.sub("", arxiv_id.strip().lower())
     return normalized or None
@@ -375,21 +380,23 @@ class PDData:
         self.correction_notices = self.get_correction_notices()
 
     def get_multi_doi_pdf_hashes(self) -> Set[str]:
-        """Finds pdf_hashes shared by papers that carry different DOIs.
+        """Finds pdf_hashes shared by papers that carry different published DOIs.
 
         One PDF often holds several short items: a page of BMJ letters, Nature research
         highlights, a meeting-abstract supplement. Each item has its own DOI, so a pdf_hash
         seen with two DOIs names a container, not a paper, and must not force merges.
         This spans the whole dataset, not one block: a container PDF is one everywhere.
+        The arXiv DOI doesn't count: a preprint record and its published record share one PDF.
 
         Returns
         -------
-        Set[str]: the pdf_hashes that map to more than one distinct DOI
+        Set[str]: the pdf_hashes that map to more than one distinct published DOI
         """
         dois_by_hash: Dict[str, Set[str]] = defaultdict(set)
         for paper in self.papers.values():
-            if paper.pdf_hash is not None and paper.doi is not None:
-                dois_by_hash[paper.pdf_hash].add(paper.doi)
+            doi = published_doi(paper)
+            if paper.pdf_hash is not None and doi is not None:
+                dois_by_hash[paper.pdf_hash].add(doi)
         return {pdf_hash for pdf_hash, dois in dois_by_hash.items() if len(dois) > 1}
 
     def get_correction_notices(self) -> Set[str]:
@@ -417,13 +424,31 @@ class PDData:
                 paper_id = parent[paper_id]
             return paper_id
 
-        first_with_key: Dict[Tuple[str, str], str] = {}
-        for paper_id in self.papers:
-            for key in self.id_merge_keys(paper_id):
-                if key in first_with_key:
-                    parent[find(paper_id)] = find(first_with_key[key])
-                else:
-                    first_with_key[key] = paper_id
+        # Link as the join after clustering does: arXiv ids last, and never between groups
+        # that hold different published DOIs. Otherwise a notice and its article, sharing
+        # one preprint, would count as one group and both be marked.
+        published: Dict[str, Set[str]] = defaultdict(set)
+        for paper_id, paper in self.papers.items():
+            doi = published_doi(paper)
+            if doi is not None:
+                published[paper_id].add(doi)
+        groups_for_key: Dict[Tuple[str, str], List[str]] = defaultdict(list)
+        for by_arxiv_id in (False, True):
+            for paper_id in self.papers:
+                for key in self.id_merge_keys(paper_id):
+                    if (key[0] == "arxiv_id") != by_arxiv_id:
+                        continue
+                    for other in groups_for_key[key]:
+                        root_a, root_b = find(paper_id), find(other)
+                        if root_a == root_b:
+                            continue
+                        dois_a, dois_b = published.get(root_a), published.get(root_b)
+                        if by_arxiv_id and dois_a and dois_b and dois_a.isdisjoint(dois_b):
+                            continue
+                        parent[root_a] = root_b
+                        if dois_a:
+                            published[root_b].update(published.pop(root_a))
+                    groups_for_key[key] = list(dict.fromkeys(find(p) for p in [*groups_for_key[key], paper_id]))
         marked: Set[str] = set()
         titled_notices: Dict[str, bool] = {}
         for paper_id, paper in self.papers.items():

@@ -274,6 +274,17 @@ class TestArxivIdConstraint(unittest.TestCase):
         )
         assert dataset.papers["1"].arxiv_id == dataset.papers["2"].arxiv_id == "2512.13961"
 
+    def test_numeric_arxiv_ids_do_not_crash(self):
+        # JSON input can hold numbers. A float has lost its trailing zeros, so it yields no id.
+        dataset = self._make_dataset(
+            {
+                "1": {"title": "P", "authors": [], "source": "ArXiv", "source_id": 2101.1, "block": "p"},
+                "2": {"title": "P", "authors": [], "source": "ArXiv", "source_id": 9901001, "block": "p"},
+            }
+        )
+        assert dataset.papers["1"].arxiv_id is None
+        assert dataset.papers["2"].arxiv_id == "9901001"
+
     def test_different_arxiv_ids_do_not_force_merge(self):
         dataset = self._make_dataset(
             {

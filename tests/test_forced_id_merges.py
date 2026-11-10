@@ -54,6 +54,17 @@ class TestPdfHashConstraint:
         )
         assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
 
+    def test_arxiv_doi_keeps_the_pdf_hash_usable(self):
+        # A preprint record and its published record share one PDF: one paper, not a container.
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "pdf_hash": "h", "doi": "10.48550/arXiv.2101.00001"},
+                "2": {"title": "A", "pdf_hash": "h", "doi": "10.1/published"},
+            }
+        )
+        assert dataset.multi_doi_pdf_hashes == set()
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+
     def test_pdf_hash_with_different_dois_does_not_force_merge(self):
         dataset = make_dataset(
             {
