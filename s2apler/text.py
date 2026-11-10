@@ -476,7 +476,9 @@ def normalize_text(text: Optional[str], special_case_apostrophes_and_dashes: boo
     if "\\" in text or text.count("$") > 1:
         try:
             text = latex_to_text(text)
-        except IndexError as e:
+        # pylatexenc raises KeyError on malformed macros such as "\sqrt[s}" with no argument.
+        # Prod failed whole requests on it; keep the raw text instead.
+        except (IndexError, KeyError) as e:
             logger.debug(f"Failed to convert latex to text with: {text} and error {e}")
     norm_text = unidecode(text).lower()
 

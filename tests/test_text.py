@@ -20,6 +20,9 @@ class TestClusterer(unittest.TestCase):
         assert "text" == normalize_text("TeXt")
         assert "te han zi xt" == normalize_text("te'漢字xt")
         assert "text" == normalize_text("te'xt", True)
+        # Malformed LaTeX from a logged prod request; pylatexenc raises KeyError on it.
+        assert "8 tev" in normalize_text(r"collisions at $\sqrt[s} = 8$ TeV")
+        assert "sqrt n" == normalize_text(r"\sqrt[n]")
 
     def test_name_similarity_features(self):
         assert [NUMPY_NAN] * 3 == name_text_features("", None)
