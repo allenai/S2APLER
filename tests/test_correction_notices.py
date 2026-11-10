@@ -68,6 +68,18 @@ def test_copies_of_a_named_notice_count_as_notices():
     assert dataset.get_constraint("article", "article_pdf") is None
 
 
+def test_an_arxiv_id_shared_with_the_article_does_not_mark_the_article():
+    # The notice and the article both carry the preprint's arXiv id but different DOIs.
+    dataset = dataset_of(
+        {
+            "article": {"title": "That gut feeling", "doi": "10.1/article", "arxiv_id": "2101.00001"},
+            "preprint": {"title": "That gut feeling", "doi": "10.48550/arXiv.2101.00001"},
+            "notice": {"title": "Correction: That gut feeling", "doi": "10.1/notice", "arxiv_id": "2101.00001"},
+        }
+    )
+    assert dataset.correction_notices == {"notice"}
+
+
 @pytest.mark.parametrize("title", ["Correction", "Retraction note: That gut feeling", "Expression of concern: X"])
 def test_notice_titles_sharing_the_article_doi_count_as_the_article(title):
     # Such records sometimes carry the corrected or retracted article's own DOI. The DOI forces
