@@ -162,7 +162,8 @@ def extract_arxiv_id(
     DataCite DOI '10.48550/arXiv.<id>', or an ArXiv-sourced record's source_id. Returns None if
     none apply.
 
-    This backs a first-class arXiv-id merge constraint (see get_constraint). It is intentionally
+    This backs the arXiv-id merge key (see id_merge_keys). Clusters sharing the id join after
+    clustering, unless they hold different published DOIs. It is intentionally
     kept out of `doi`: S2 does not synthesize the '10.48550/arXiv.<id>' DOI onto arXiv-only
     records, so an arXiv-only record (source_id=<id>, doi=None) and a DBLP record for the same
     paper (doi='10.48550/arXiv.<id>') otherwise share no hard identifier. Folding it into `doi`
@@ -177,6 +178,17 @@ def extract_arxiv_id(
     if source and source_id and source.lower() == "arxiv":
         return _normalize_arxiv_id(source_id)
     return None
+
+
+def published_doi(paper: "Paper") -> Optional[str]:
+    """Returns the paper's DOI unless it is the arXiv DataCite DOI '10.48550/arXiv.<id>'.
+
+    Two different published DOIs mark two different papers, such as a conference paper and
+    its journal version. One arXiv preprint often links to both, so the arXiv id must not
+    join them."""
+    if paper.doi is None or RE_ARXIV_DOI.match(paper.doi):
+        return None
+    return paper.doi
 
 
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
@@ -552,12 +564,6 @@ class PDData:
         ):
             # same pdf hash - same paper, unless the PDF holds several DOI'd items
             return CLUSTER_SEEDS_LOOKUP["require"]
-        elif paper_1.arxiv_id is not None and paper_2.arxiv_id is not None and paper_1.arxiv_id == paper_2.arxiv_id:
-            # same arXiv id - same paper. arXiv-only records carry no DOI (S2 does not derive
-            # 10.48550/arXiv.<id>), so an ArXiv record (source_id=<id>) and a DBLP record for the
-            # same paper (doi=10.48550/arXiv.<id>) otherwise share no hard identifier and fall to
-            # the fuzzy model, which misses on short titles (e.g. "Olmo 3"). See allenai/scholar#41736.
-            return CLUSTER_SEEDS_LOOKUP["require"]
         elif (
             paper_1.source_uris
             and paper_2.source_uris
@@ -724,7 +730,6 @@ class PDData:
             [paper.pdf_hash if paper.pdf_hash not in self.multi_doi_pdf_hashes else None for paper in papers]
         )
         for codes in (
-            _codes([paper.arxiv_id for paper in papers]),
             pdf_hash,
             _codes([paper.pmid for paper in papers]),
             _codes([paper.doi for paper in papers]),
