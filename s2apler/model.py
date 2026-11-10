@@ -14,6 +14,7 @@ from functools import partial
 from tqdm import tqdm
 import logging
 import copy
+import weakref
 
 import numpy as np
 from scipy.cluster.hierarchy import fcluster
@@ -28,6 +29,26 @@ from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.exceptions import EfficiencyWarning
 
 logger = logging.getLogger("s2apler")
+
+# The paper order each live distance matrix from make_distance_matrices was built over, by
+# id(). predict reads a matrix by position, so it checks this order against its own.
+_MATRIX_PAPER_ORDER: Dict[int, Tuple[str, ...]] = {}
+
+
+def _remember_paper_order(distances: np.ndarray, papers: List[str]) -> None:
+    """Records the paper order of a distance matrix until the matrix is freed.
+
+    Parameters
+    ----------
+    distances: np.ndarray
+        the condensed distance matrix
+    papers: List[str]
+        the paper ids the matrix was built over, in order
+    """
+    key = id(distances)
+    _MATRIX_PAPER_ORDER[key] = tuple(papers)
+    # Drop the entry with the matrix, before another object can reuse its id.
+    weakref.finalize(distances, _MATRIX_PAPER_ORDER.pop, key, None)
 
 
 def _split_null_title_papers(
@@ -487,6 +508,7 @@ class Clusterer:
             # flattened pdist style
             distances = np.zeros(n * (n - 1) // 2, dtype=np.float16)
             distance_matrices[block_key] = distances
+            _remember_paper_order(distances, papers)
             block_positions = np.array([position[paper_id] for paper_id in papers], dtype=np.uint32)
             pair_rules = dataset.block_pair_rules(papers) if self.use_default_constraints_as_supervision else None
             for left, right, first_offset in _condensed_pair_chunks(n, self.batch_size):
@@ -769,6 +791,14 @@ class Clusterer:
                     raise ValueError(
                         f"Distance matrix for block {block_key!r} has shape {dists[block_key].shape}, "
                         f"expected {expected_shape} for its {n} titled papers"
+                    )
+                # A matrix from make_distance_matrices over the caller's own order has the right
+                # shape, yet pairs each distance with the wrong papers.
+                built_over = _MATRIX_PAPER_ORDER.get(id(dists[block_key]))
+                if built_over is not None and list(built_over) != titled_paper_ids:
+                    raise ValueError(
+                        f"Distance matrix for block {block_key!r} was built over another paper order. "
+                        "Build it over the block's titled papers sorted by id, or let predict build it."
                     )
                 cluster_model = self.set_params(cluster_model_params, clone_flag=True)
                 with warnings.catch_warnings():

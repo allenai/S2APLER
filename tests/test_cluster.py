@@ -100,6 +100,20 @@ class TestClustererFit(unittest.TestCase):
         with pytest.raises(ValueError, match="has shape"):
             clusterer.predict(block, dataset, dists={"reviewerlistfor": np.ones(6, dtype=np.float16)})
 
+    def test_predict_rejects_distances_built_over_another_order(self):
+        # predict reads distances over sorted paper ids. A matrix built over the caller's
+        # order has the right shape, so only the remembered order can catch it.
+        dataset, clusterer = self.make_dataset_and_clusterer()
+        block = {"reviewerlistfor": ["84177344", "49188235", "214237506"]}
+        unsorted = clusterer.make_distance_matrices(block, dataset, disable_tqdm=True)
+        with pytest.raises(ValueError, match="another paper order"):
+            clusterer.predict(block, dataset, dists=unsorted)
+        in_order = {key: sorted(papers) for key, papers in block.items()}
+        clusters, _ = clusterer.predict(
+            block, dataset, dists=clusterer.make_distance_matrices(in_order, dataset, disable_tqdm=True)
+        )
+        assert sorted(paper_id for papers in clusters.values() for paper_id in papers) == in_order["reviewerlistfor"]
+
 
 def test_constructors_reject_arguments_past_removed_parameters():
     import pytest
