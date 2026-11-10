@@ -232,7 +232,9 @@ class TestSourceUriConstraint(unittest.TestCase):
 
 
 class TestArxivIdConstraint(unittest.TestCase):
-    """Same arXiv id -> must-merge, even when the two records share no other hard identifier.
+    """Same arXiv id -> the clusters join after clustering, even when the two records share
+    no other hard identifier. The id is a merge key, not a pair constraint: a zero distance
+    let the model merge a conference paper with its journal version through one preprint.
     Motivating case: an arXiv-only record (source=ArXiv, source_id=<id>, doi=None) and a DBLP
     record for the same paper (doi=10.48550/arXiv.<id>). S2 does not synthesize the arXiv DOI
     onto arXiv-only records, so without a first-class arXiv-id constraint these fall to the
@@ -257,7 +259,10 @@ class TestArxivIdConstraint(unittest.TestCase):
                 },
             }
         )
-        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+        assert dataset.id_merge_keys("1") == [("arxiv_id", "2512.13961")]
+        assert ("arxiv_id", "2512.13961") in dataset.id_merge_keys("2")
+        # The join after clustering applies the id; see tests/test_forced_id_merges.py.
+        assert dataset.get_constraint("1", "2") is None
 
     def test_arxiv_id_normalization_version_and_case(self):
         # Version suffix stripped and case-folded so 'ArXiv.2512.13961' == 'source_id 2512.13961v2'.
@@ -267,7 +272,7 @@ class TestArxivIdConstraint(unittest.TestCase):
                 "2": {"title": "P", "authors": [], "doi": "10.48550/ARXIV.2512.13961", "block": "p"},
             }
         )
-        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+        assert dataset.papers["1"].arxiv_id == dataset.papers["2"].arxiv_id == "2512.13961"
 
     def test_different_arxiv_ids_do_not_force_merge(self):
         dataset = self._make_dataset(
