@@ -87,6 +87,7 @@ class TestPdfHashConstraint:
             "https://doi.org/10.1/abc",
             "http://dx.doi.org/10.1/abc",
             "https://www.doi.org/10.1/abc",
+            "10.1/abc.",
             "doi.org/10.1/abc",
             "doi:10.1/abc",
             "DOI: 10.1/abc",
@@ -192,9 +193,9 @@ class TestPredictIdJoins:
         assert partition(clusters) == [["1", "2"], ["3", "4"]]
 
     @pytest.mark.parametrize("order", list(permutations("1234")))
-    def test_arxiv_id_does_not_join_conference_and_journal_versions(self, order):
+    def test_arxiv_id_joins_conference_and_journal_versions(self, order):
         # One preprint links to both versions: one of its records shares the conference PDF,
-        # and another carries the journal DOI. Different published DOIs are two papers.
+        # and another carries the journal DOI. Preprint and both versions are one work.
         dataset = make_dataset(
             {
                 "1": {"title": "A", "source": "IEEE", "doi": "10.1109/isit.1", "pdf_hash": "g"},
@@ -204,7 +205,7 @@ class TestPredictIdJoins:
             }
         )
         clusters, _ = make_clusterer().predict({"b": list(order)}, dataset, dists={"b": far_apart(4)})
-        assert partition(clusters) == [["1", "2"], ["3", "4"]]
+        assert partition(clusters) == [["1", "2", "3", "4"]]
 
     def test_arxiv_id_joins_a_preprint_to_its_one_published_version(self):
         dataset = make_dataset(

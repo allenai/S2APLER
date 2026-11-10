@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from s2apler.eval import b3_precision_recall_fscore
 from s2apler.featurizer import FeaturizationInfo, many_pairs_featurize, paper_featurizer
-from s2apler.data import PDData, condensed_offsets, published_doi
+from s2apler.data import PDData, condensed_offsets
 from s2apler.consts import LARGE_INTEGER
 from s2apler.native_scorer import scoring_classifier
 from s2and.thread_config import resolve_n_jobs
 
-from typing import Dict, Optional, Any, Union, List, Set, Tuple, cast
+from typing import Dict, Optional, Any, Union, List, Tuple, cast
 from collections import defaultdict
 import warnings
 from functools import partial
@@ -74,8 +74,8 @@ def _join_clusters_by_ids(
     two titled clusters: a title-less record often carries one item's DOI and a multi-item
     PDF's hash, and bridging would merge distinct papers.
 
-    An arXiv id never joins two groups that hold different published DOIs. One preprint often
-    links to a conference paper and to its journal version, and those are two papers.
+    An arXiv id joins like any other identifier, across different published DOIs too. A
+    preprint, its conference paper and its journal version are one work to a reader.
 
     Parameters
     ----------
@@ -110,26 +110,15 @@ def _join_clusters_by_ids(
     for paper_id in partners:
         seeded[label_of[paper_id]].append(paper_id)
 
-    # The published DOIs each group holds, to refuse arXiv-id joins between different papers.
-    published: Dict[int, Set[str]] = defaultdict(set)
-    for paper_id, label in zip(paper_ids, labels):
-        doi = published_doi(dataset.papers[paper_id])
-        if doi is not None:
-            published[label].add(doi)
-
     def find(label: int) -> int:
         while parent[label] != label:
             parent[label] = parent[parent[label]]
             label = parent[label]
         return label
 
-    def union(label_a: int, label_b: int, may_join_titled: bool, by_arxiv_id: bool):
+    def union(label_a: int, label_b: int, may_join_titled: bool):
         root_a, root_b = find(label_a), find(label_b)
         if root_a == root_b:
-            return
-        # Groups sharing a published DOI join by that DOI, so any overlap means the same paper.
-        dois_a, dois_b = published.get(root_a), published.get(root_b)
-        if by_arxiv_id and dois_a and dois_b and dois_a.isdisjoint(dois_b):
             return
         # A root below first_null_label means the group already holds a titled cluster.
         if not may_join_titled and root_a < first_null_label and root_b < first_null_label:
@@ -143,30 +132,22 @@ def _join_clusters_by_ids(
         parent[merged] = kept
         if merged in seeded:
             seeded[kept].extend(seeded.pop(merged))
-        if merged in published:
-            published[kept].update(published.pop(merged))
 
-    # A join refused by a seed or by different published DOIs leaves several groups behind one
-    # key. Then try each, so a paper the first group refuses can still join another. Otherwise
-    # retrying cannot change the result: a refused join means both groups hold titled
-    # clusters, as does every other group left behind the key.
-    # arXiv ids join last, so each group already holds every published DOI its other
-    # identifiers bring in. Joined earlier, an arXiv id could link a DOI-less record to one
-    # paper before a pdf_hash links that record to another.
+    # A join refused by a seed leaves several groups behind one key. Then try each, so a
+    # paper the first group refuses can still join another. Without seeds, retrying cannot
+    # change the result: a refused join means both groups hold titled clusters, as does
+    # every other group left behind the key.
     groups_for_key: Dict[Tuple[str, str], List[int]] = {}
-    for by_arxiv_id in (False, True):
-        for paper_id, label in zip(paper_ids, labels):
-            is_titled = label < first_null_label
-            for key in dataset.id_merge_keys(paper_id):
-                if (key[0] == "arxiv_id") != by_arxiv_id:
-                    continue
-                earlier = groups_for_key.get(key, [])
-                for other in earlier:
-                    union(other, label, may_join_titled=join_titled and is_titled, by_arxiv_id=by_arxiv_id)
-                if partners or by_arxiv_id:
-                    groups_for_key[key] = list(dict.fromkeys(find(group) for group in [*earlier, label]))
-                elif not earlier:
-                    groups_for_key[key] = [label]
+    for paper_id, label in zip(paper_ids, labels):
+        is_titled = label < first_null_label
+        for key in dataset.id_merge_keys(paper_id):
+            earlier = groups_for_key.get(key, [])
+            for other in earlier:
+                union(other, label, may_join_titled=join_titled and is_titled)
+            if partners:
+                groups_for_key[key] = list(dict.fromkeys(find(group) for group in [*earlier, label]))
+            elif not earlier:
+                groups_for_key[key] = [label]
 
     # Number null-only groups consecutively, as before, so unchanged clusters keep their keys.
     renumbered: Dict[int, int] = {}

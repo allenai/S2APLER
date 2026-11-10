@@ -103,6 +103,7 @@ def normalize_doi(doi: Optional[str]) -> Optional[str]:
 
     One work can arrive as "10.1/a#b" and "https://doi.org/10.1/A%23b". Without this, the two
     don't match, and a PDF they share looks like it holds two different DOI'd items.
+    A trailing period is sentence punctuation copied with the DOI, so it goes too.
     """
     if doi is None:
         return None
@@ -113,7 +114,7 @@ def normalize_doi(doi: Optional[str]) -> Optional[str]:
         doi = urllib.parse.unquote(doi[url_prefix.end() :])
     else:
         doi = DOI_SCHEME_PREFIX.sub("", doi, count=1)
-    return doi.strip().lower() or None
+    return doi.strip().rstrip(".").strip().lower() or None
 
 
 def _codes(values: List[Any]) -> np.ndarray:
@@ -168,7 +169,7 @@ def extract_arxiv_id(
     none apply.
 
     This backs the arXiv-id merge key (see id_merge_keys). Clusters sharing the id join after
-    clustering, unless they hold different published DOIs. It is intentionally
+    clustering. It is intentionally
     kept out of `doi`: S2 does not synthesize the '10.48550/arXiv.<id>' DOI onto arXiv-only
     records, so an arXiv-only record (source_id=<id>, doi=None) and a DBLP record for the same
     paper (doi='10.48550/arXiv.<id>') otherwise share no hard identifier. Folding it into `doi`
@@ -188,9 +189,9 @@ def extract_arxiv_id(
 def published_doi(paper: "Paper") -> Optional[str]:
     """Returns the paper's DOI unless it is the arXiv DataCite DOI '10.48550/arXiv.<id>'.
 
-    Two different published DOIs mark two different papers, such as a conference paper and
-    its journal version. One arXiv preprint often links to both, so the arXiv id must not
-    join them."""
+    The arXiv DOI names the preprint of a paper, not a second paper. So a PDF shared by a
+    preprint record and a published record holds one item, and a correction notice is told
+    from its article by their published DOIs."""
     if paper.doi is None or RE_ARXIV_DOI.match(paper.doi):
         return None
     return paper.doi
