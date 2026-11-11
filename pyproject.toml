@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "s2apler"
-version = "0.4.0"
+version = "0.4.1"
 description = "S2APLER: Semantic Scholar (S2) Agglomeration of Papers with Low Error Rate"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
