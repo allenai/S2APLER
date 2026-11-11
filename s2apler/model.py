@@ -75,6 +75,9 @@ def _join_clusters_by_ids(
     two titled clusters: a title-less record often carries one item's DOI and a multi-item
     PDF's hash, and bridging would merge distinct papers.
 
+    An arXiv id joins like any other identifier, across different published DOIs too. A
+    preprint, its conference paper and its journal version are one work to a reader.
+
     Parameters
     ----------
     paper_ids: List[str]
@@ -772,7 +775,7 @@ class Clusterer:
             labels = labels + list(range(next_label, next_label + len(null_title_paper_ids)))
 
             # The enforced 0 distance can lose to many large distances under average linkage,
-            # so clusters sharing a DOI, PMID or usable pdf_hash are joined explicitly here.
+            # so clusters sharing a DOI, PMID, usable pdf_hash or arXiv id are joined explicitly here.
             labels = _join_clusters_by_ids(
                 paper_ids_for_block,
                 labels,

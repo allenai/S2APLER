@@ -78,6 +78,7 @@ class Paper(NamedTuple):
     abstract_ngram_text: Optional[str] = None
     venue_ngram_text: Optional[str] = None
     coauthor_ngram_text: Optional[str] = None
+    arxiv_id: Optional[str] = None
 
 
 # Resolver URLs, with or without scheme or host prefix: https://doi.org/, http://dx.doi.org/, doi.org/.
@@ -102,6 +103,7 @@ def normalize_doi(doi: Optional[str]) -> Optional[str]:
 
     One work can arrive as "10.1/a#b" and "https://doi.org/10.1/A%23b". Without this, the two
     don't match, and a PDF they share looks like it holds two different DOI'd items.
+    A trailing period is sentence punctuation copied with the DOI, so it goes too.
     """
     if doi is None:
         return None
@@ -112,7 +114,7 @@ def normalize_doi(doi: Optional[str]) -> Optional[str]:
         doi = urllib.parse.unquote(doi[url_prefix.end() :])
     else:
         doi = DOI_SCHEME_PREFIX.sub("", doi, count=1)
-    return doi.strip().lower() or None
+    return doi.strip().rstrip(".").strip().lower() or None
 
 
 def _codes(values: List[Any]) -> np.ndarray:
@@ -137,6 +139,62 @@ def _codes(values: List[Any]) -> np.ndarray:
 def condensed_offsets(i: np.ndarray, j: np.ndarray, n: int) -> np.ndarray:
     """Positions of pairs (i, j), i < j, in a condensed n-by-n distance vector."""
     return i * n - i * (i + 1) // 2 + (j - i - 1)
+
+
+RE_ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
+RE_ARXIV_VERSION = re.compile(r"v\d+$", re.IGNORECASE)
+
+
+def _normalize_arxiv_id(arxiv_id: Any) -> Optional[str]:
+    """Lowercase and strip a trailing version suffix (e.g. '2512.13961v2' -> '2512.13961').
+
+    JSON input can hold a number. A float has lost trailing zeros ('2101.10000' reads as
+    2101.1), so only a string or an int yields an id."""
+    if isinstance(arxiv_id, int) and not isinstance(arxiv_id, bool):
+        arxiv_id = str(arxiv_id)
+    if not isinstance(arxiv_id, str) or not arxiv_id:
+        return None
+    normalized = RE_ARXIV_VERSION.sub("", arxiv_id.strip().lower())
+    return normalized or None
+
+
+def extract_arxiv_id(
+    source: Optional[str],
+    source_id: Optional[str],
+    doi: Optional[str],
+    explicit: Optional[str] = None,
+) -> Optional[str]:
+    """Derive a normalized arXiv id from (in priority order) an explicit field, the arXiv
+    DataCite DOI '10.48550/arXiv.<id>', or an ArXiv-sourced record's source_id. Returns None if
+    none apply.
+
+    This backs the arXiv-id merge key (see id_merge_keys). Clusters sharing the id join after
+    clustering. It is intentionally
+    kept out of `doi`: S2 does not synthesize the '10.48550/arXiv.<id>' DOI onto arXiv-only
+    records, so an arXiv-only record (source_id=<id>, doi=None) and a DBLP record for the same
+    paper (doi='10.48550/arXiv.<id>') otherwise share no hard identifier. Folding it into `doi`
+    instead would make a preprint and its published version (a real, different DOI) look like
+    disagreeing strong signals -- see `_strong_signals_disagree` / allenai/scholar#41863."""
+    if explicit:
+        return _normalize_arxiv_id(explicit)
+    if doi:
+        match = RE_ARXIV_DOI.match(doi.strip())
+        if match:
+            return _normalize_arxiv_id(match.group(1))
+    if source and source_id and source.lower() == "arxiv":
+        return _normalize_arxiv_id(source_id)
+    return None
+
+
+def published_doi(paper: "Paper") -> Optional[str]:
+    """Returns the paper's DOI unless it is the arXiv DataCite DOI '10.48550/arXiv.<id>'.
+
+    The arXiv DOI names the preprint of a paper, not a second paper. So a PDF shared by a
+    preprint record and a published record holds one item, and a correction notice is told
+    from its article by their published DOIs."""
+    if paper.doi is None or RE_ARXIV_DOI.match(paper.doi):
+        return None
+    return paper.doi
 
 
 def _strong_signals_disagree(p1: "Paper", p2: "Paper") -> bool:
@@ -251,6 +309,13 @@ class PDData:
                 block=paper.get("block", None),
                 corpus_paper_id=paper.get("corpus_paper_id", None),
                 source_uris=paper.get("source_uris", None),
+                arxiv_id=extract_arxiv_id(
+                    paper.get("source", None),
+                    paper.get("source_id", None),
+                    # The normalized DOI, so a resolver URL for the arXiv DOI still yields the id.
+                    normalize_doi(paper.get("doi", None)),
+                    paper.get("arxiv_id", None),
+                ),
             )
         logger.debug("loaded papers")
 
@@ -316,27 +381,29 @@ class PDData:
         self.correction_notices = self.get_correction_notices()
 
     def get_multi_doi_pdf_hashes(self) -> Set[str]:
-        """Finds pdf_hashes shared by papers that carry different DOIs.
+        """Finds pdf_hashes shared by papers that carry different published DOIs.
 
         One PDF often holds several short items: a page of BMJ letters, Nature research
         highlights, a meeting-abstract supplement. Each item has its own DOI, so a pdf_hash
         seen with two DOIs names a container, not a paper, and must not force merges.
         This spans the whole dataset, not one block: a container PDF is one everywhere.
+        The arXiv DOI doesn't count: a preprint record and its published record share one PDF.
 
         Returns
         -------
-        Set[str]: the pdf_hashes that map to more than one distinct DOI
+        Set[str]: the pdf_hashes that map to more than one distinct published DOI
         """
         dois_by_hash: Dict[str, Set[str]] = defaultdict(set)
         for paper in self.papers.values():
-            if paper.pdf_hash is not None and paper.doi is not None:
-                dois_by_hash[paper.pdf_hash].add(paper.doi)
+            doi = published_doi(paper)
+            if paper.pdf_hash is not None and doi is not None:
+                dois_by_hash[paper.pdf_hash].add(doi)
         return {pdf_hash for pdf_hash, dois in dois_by_hash.items() if len(dois) > 1}
 
     def get_correction_notices(self) -> Set[str]:
         """Finds the papers that are correction notices.
 
-        Papers linked by a shared DOI, PMID or usable pdf_hash end up in one cluster, so each
+        Papers linked by a shared DOI, PMID, usable pdf_hash or arXiv id end up in one cluster, so each
         linked group is all notices or none; anything else would contradict the forced merge.
         A group is a notice when it holds a "Correction: X" paper with its own DOI or PMID,
         because a notice's copies often drop the prefix and its PDF often carries the
@@ -358,13 +425,31 @@ class PDData:
                 paper_id = parent[paper_id]
             return paper_id
 
-        first_with_key: Dict[Tuple[str, str], str] = {}
-        for paper_id in self.papers:
-            for key in self.id_merge_keys(paper_id):
-                if key in first_with_key:
-                    parent[find(paper_id)] = find(first_with_key[key])
-                else:
-                    first_with_key[key] = paper_id
+        # Link as the join after clustering does: arXiv ids last, and never between groups
+        # that hold different published DOIs. Otherwise a notice and its article, sharing
+        # one preprint, would count as one group and both be marked.
+        published: Dict[str, Set[str]] = defaultdict(set)
+        for paper_id, paper in self.papers.items():
+            doi = published_doi(paper)
+            if doi is not None:
+                published[paper_id].add(doi)
+        groups_for_key: Dict[Tuple[str, str], List[str]] = defaultdict(list)
+        for by_arxiv_id in (False, True):
+            for paper_id in self.papers:
+                for key in self.id_merge_keys(paper_id):
+                    if (key[0] == "arxiv_id") != by_arxiv_id:
+                        continue
+                    for other in groups_for_key[key]:
+                        root_a, root_b = find(paper_id), find(other)
+                        if root_a == root_b:
+                            continue
+                        dois_a, dois_b = published.get(root_a), published.get(root_b)
+                        if by_arxiv_id and dois_a and dois_b and dois_a.isdisjoint(dois_b):
+                            continue
+                        parent[root_a] = root_b
+                        if dois_a:
+                            published[root_b].update(published.pop(root_a))
+                    groups_for_key[key] = list(dict.fromkeys(find(p) for p in [*groups_for_key[key], paper_id]))
         marked: Set[str] = set()
         titled_notices: Dict[str, bool] = {}
         for paper_id, paper in self.papers.items():
@@ -386,7 +471,7 @@ class PDData:
 
         Returns
         -------
-        List[Tuple[str, str]]: (id type, value) pairs for the DOI, PMID and usable pdf_hash
+        List[Tuple[str, str]]: (id type, value) pairs for the DOI, PMID, usable pdf_hash and arXiv id
         """
         paper = self.papers[str(paper_id)]
         keys = []
@@ -396,6 +481,8 @@ class PDData:
             keys.append(("pmid", paper.pmid))
         if paper.pdf_hash is not None and paper.pdf_hash not in self.multi_doi_pdf_hashes:
             keys.append(("pdf_hash", paper.pdf_hash))
+        if paper.arxiv_id is not None:
+            keys.append(("arxiv_id", paper.arxiv_id))
         return keys
 
     @staticmethod
@@ -668,7 +755,11 @@ class PDData:
         pdf_hash = _codes(
             [paper.pdf_hash if paper.pdf_hash not in self.multi_doi_pdf_hashes else None for paper in papers]
         )
-        for codes in (pdf_hash, _codes([paper.pmid for paper in papers]), _codes([paper.doi for paper in papers])):
+        for codes in (
+            pdf_hash,
+            _codes([paper.pmid for paper in papers]),
+            _codes([paper.doi for paper in papers]),
+        ):
             values[(codes[left] >= 0) & (codes[left] == codes[right])] = CLUSTER_SEEDS_LOOKUP["require"]
 
         seed = _codes([self.cluster_seeds_require.get(paper_id) for paper_id in paper_ids])

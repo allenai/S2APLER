@@ -33,6 +33,7 @@ def crafted_dataset(seed=0):
             "source_id": rng.choice([None, "s1", "s2", ""]),
             "source_uris": rng.choice([None, ["u1"], ["u1", "u2"], ["u3"]]),
             "block": "b1" if k < 40 else "b2",
+            "arxiv_id": rng.choice([None, None, "2512.13961", "2512.13961V2", "2401.00001"]),
         }
     # A PDF that no two DOIs share, so its hash forces merges.
     for k in [10, 11, 12, 41, 42]:

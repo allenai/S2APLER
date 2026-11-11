@@ -54,6 +54,17 @@ class TestPdfHashConstraint:
         )
         assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
 
+    def test_arxiv_doi_keeps_the_pdf_hash_usable(self):
+        # A preprint record and its published record share one PDF: one paper, not a container.
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "pdf_hash": "h", "doi": "10.48550/arXiv.2101.00001"},
+                "2": {"title": "A", "pdf_hash": "h", "doi": "10.1/published"},
+            }
+        )
+        assert dataset.multi_doi_pdf_hashes == set()
+        assert dataset.get_constraint("1", "2") == CLUSTER_SEEDS_LOOKUP["require"]
+
     def test_pdf_hash_with_different_dois_does_not_force_merge(self):
         dataset = make_dataset(
             {
@@ -76,6 +87,7 @@ class TestPdfHashConstraint:
             "https://doi.org/10.1/abc",
             "http://dx.doi.org/10.1/abc",
             "https://www.doi.org/10.1/abc",
+            "10.1/abc.",
             "doi.org/10.1/abc",
             "doi:10.1/abc",
             "DOI: 10.1/abc",
@@ -166,6 +178,45 @@ class TestPredictIdJoins:
         )
         clusters, _ = make_clusterer().predict({"b": list(order)}, dataset, dists={"b": far_apart(5)})
         assert partition(clusters) == [["1", "2", "3", "4", "5"]]
+
+    def test_arxiv_id_joins_clusters_the_model_keeps_apart(self):
+        # The DBLP record gives the arXiv DOI as a resolver URL; it still yields the arXiv id.
+        dataset = make_dataset(
+            {
+                "1": {"title": "Olmo 3", "source": "ArXiv", "source_id": "2512.13961"},
+                "2": {"title": "Olmo 3", "source": "DBLP", "doi": "https://doi.org/10.48550/arXiv.2512.13961"},
+                "3": {"title": "Olmo 2", "source": "ArXiv", "source_id": "2501.00656"},
+                "4": {"title": None, "source": "ArXiv", "source_id": "2501.00656v3"},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"b": ["1", "2", "3", "4"]}, dataset, dists={"b": far_apart(3)})
+        assert partition(clusters) == [["1", "2"], ["3", "4"]]
+
+    @pytest.mark.parametrize("order", list(permutations("1234")))
+    def test_arxiv_id_joins_conference_and_journal_versions(self, order):
+        # One preprint links to both versions: one of its records shares the conference PDF,
+        # and another carries the journal DOI. Preprint and both versions are one work.
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "source": "IEEE", "doi": "10.1109/isit.1", "pdf_hash": "g"},
+                "2": {"title": "A", "source": "ArXiv", "source_id": "1401.00001v1", "pdf_hash": "g"},
+                "3": {"title": "A", "source": "ArXiv", "source_id": "1401.00001", "doi": "10.1109/tit.2"},
+                "4": {"title": "A", "source": "Crossref", "doi": "10.1109/tit.2"},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"b": list(order)}, dataset, dists={"b": far_apart(4)})
+        assert partition(clusters) == [["1", "2", "3", "4"]]
+
+    def test_arxiv_id_joins_a_preprint_to_its_one_published_version(self):
+        dataset = make_dataset(
+            {
+                "1": {"title": "A", "source": "ArXiv", "source_id": "1401.00001"},
+                "2": {"title": "A", "source": "DBLP", "doi": "10.48550/arXiv.1401.00001"},
+                "3": {"title": "A", "source": "ArXiv", "source_id": "1401.00001v2", "doi": "10.1109/tit.2"},
+            }
+        )
+        clusters, _ = make_clusterer().predict({"b": ["1", "2", "3"]}, dataset, dists={"b": far_apart(3)})
+        assert partition(clusters) == [["1", "2", "3"]]
 
     def test_multi_doi_pdf_hash_does_not_join_clusters(self):
         dataset = make_dataset(
