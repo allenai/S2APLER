@@ -106,7 +106,7 @@ def test_a_disallowed_pair_stays_apart_despite_a_shared_doi(predictor, papers):
     assert seeded[key] != seeded["copy"]
 
 
-def join(records, labels, first_null_label, seeds=None, join_titled=True):
+def join(records, labels, first_null_label, seeds=None, join_titled=True, dont_merge_cluster_seeds=True):
     """Runs the identifier join on minimal records; returns each paper's joined label."""
     from s2apler.data import PDData
     from s2apler.model import _join_clusters_by_ids
@@ -118,7 +118,10 @@ def join(records, labels, first_null_label, seeds=None, join_titled=True):
         mode="inference",
         cluster_seeds=seeds,
     )
-    return dict(zip(records, _join_clusters_by_ids(list(records), labels, dataset, first_null_label, join_titled)))
+    joined = _join_clusters_by_ids(
+        list(records), labels, dataset, first_null_label, join_titled, dont_merge_cluster_seeds=dont_merge_cluster_seeds
+    )
+    return dict(zip(records, joined))
 
 
 @pytest.mark.parametrize("order", ["abc", "bca", "cab"])
@@ -151,6 +154,47 @@ def test_random_blocks_never_join_a_disallowed_pair():
             seeds.setdefault(a, {})[b] = "disallow"
         joined = join(records, labels, titled, seeds or None, join_titled=rng.random() < 0.8)
         assert all(joined[a] != joined[b] for a, b in pairs), (records, labels, pairs)
+
+
+@pytest.mark.parametrize("order", ["abcde", "edcba", "cbeda", "ebcad"])
+def test_different_require_seeds_never_join_through_an_identifier(order):
+    # a+b and c+d are two required clusters; b and c share a DOI, as does the unseeded e.
+    records = {pid: {"doi": "10.1/x" if pid in "bce" else None} for pid in order}
+    seeds = {"a": {"b": "require"}, "c": {"d": "require"}}
+    joined = join(records, list(range(5)), 0, seeds)
+    assert joined["b"] != joined["c"]
+    # The unseeded copy still joins one of them.
+    assert joined["e"] in (joined["b"], joined["c"])
+    # Without dont_merge_cluster_seeds, get_constraint does not keep them apart, nor does the join.
+    joined = join(records, list(range(5)), 0, seeds, dont_merge_cluster_seeds=False)
+    assert joined["b"] == joined["c"] == joined["e"]
+
+
+def test_titled_clusters_of_different_require_seeds_stay_apart():
+    records = {"a": {"title": "x"}, "b": {"title": "x", "doi": "10.1/x"}, "c": {"title": "y", "doi": "10.1/x"}}
+    joined = join(records, [0, 0, 1], 2, {"a": {"b": "require"}, "c": {"c": "require"}})
+    assert joined["a"] == joined["b"] != joined["c"]
+
+
+def test_random_blocks_never_join_different_require_seeds():
+    rng = random.Random(1)
+    for _ in range(300):
+        names = [f"p{i}" for i in range(rng.randint(2, 7))]
+        records = {
+            name: {"doi": rng.choice([None, "10.1/a", "10.1/b"]), "pmid": rng.choice([None, "1", "2"])}
+            for name in names
+        }
+        seed_of = {name: rng.choice([None, 0, 1, 2]) for name in names}
+        seeds = {}
+        for seed in {s for s in seed_of.values() if s is not None}:
+            members = [name for name in names if seed_of[name] == seed]
+            seeds[f"root{seed}"] = {name: "require" for name in members}
+        records.update({root: {"doi": None, "pmid": None} for root in seeds})
+        joined = join(records, list(range(len(records))), 0, seeds or None)
+        for a in names:
+            for b in names:
+                if seed_of[a] is not None and seed_of[b] is not None and seed_of[a] != seed_of[b]:
+                    assert joined[a] != joined[b], (records, seed_of)
 
 
 @pytest.mark.parametrize("order", ["abc", "acb", "bac", "bca", "cab", "cba"])
