@@ -7,7 +7,7 @@ from s2apler.consts import LARGE_INTEGER
 from s2apler.native_scorer import scoring_classifier
 from s2and.thread_config import resolve_n_jobs
 
-from typing import Dict, Optional, Any, Union, List, Tuple, cast
+from typing import Dict, Optional, Any, Union, List, Tuple, Set, cast
 from collections import defaultdict
 import warnings
 from functools import partial
@@ -65,6 +65,7 @@ def _join_clusters_by_ids(
     dataset: PDData,
     first_null_label: int,
     join_titled: bool,
+    dont_merge_cluster_seeds: bool = True,
 ) -> List[int]:
     """Joins clusters whose papers share an identifier.
 
@@ -87,6 +88,8 @@ def _join_clusters_by_ids(
         the smallest label given to a null-title paper
     join_titled: bool
         whether titled clusters sharing an identifier join each other
+    dont_merge_cluster_seeds: bool
+        whether papers seeded into different "require" clusters stay apart, as in get_constraint
 
     Returns
     -------
@@ -94,6 +97,26 @@ def _join_clusters_by_ids(
         only null-title papers are numbered from first_null_label in order of appearance
     """
     parent = {label: label for label in labels}
+    # A pair the cluster seeds disallow never joins, even through a shared identifier, so a
+    # split pinned by a seed stays split. Only seeds between papers of this block matter.
+    label_of = dict(zip(paper_ids, labels))
+    partners: Dict[str, List[str]] = {}
+    if dataset.cluster_seeds_disallow:
+        for paper_id, others in dataset._disallow_partners().items():
+            inside = [other for other in others if other in label_of]
+            if paper_id in label_of and inside:
+                partners[paper_id] = inside
+    seeded: Dict[int, List[str]] = defaultdict(list)
+    for paper_id in partners:
+        seeded[label_of[paper_id]].append(paper_id)
+    # get_constraint keeps papers of different "require" seeds apart; the join must too.
+    # Each group tracks the require seeds its papers carry.
+    require_seeds: Dict[int, Set[int]] = defaultdict(set)
+    if dont_merge_cluster_seeds:
+        for paper_id, label in label_of.items():
+            if paper_id in dataset.cluster_seeds_require:
+                require_seeds[label].add(dataset.cluster_seeds_require[paper_id])
+    constrained = bool(partners) or bool(require_seeds)
 
     def find(label: int) -> int:
         while parent[label] != label:
@@ -108,16 +131,36 @@ def _join_clusters_by_ids(
         # A root below first_null_label means the group already holds a titled cluster.
         if not may_join_titled and root_a < first_null_label and root_b < first_null_label:
             return
-        parent[max(root_a, root_b)] = min(root_a, root_b)
+        if partners:
+            # Seeds are symmetric, so scanning the group with fewer seeded papers suffices.
+            fewer, more = sorted((root_a, root_b), key=lambda root: len(seeded.get(root, ())))
+            if any(find(label_of[other]) == more for paper_id in seeded.get(fewer, ()) for other in partners[paper_id]):
+                return
+        seeds_a, seeds_b = require_seeds.get(root_a), require_seeds.get(root_b)
+        if seeds_a and seeds_b and len(seeds_a | seeds_b) > 1:
+            return
+        kept, merged = min(root_a, root_b), max(root_a, root_b)
+        parent[merged] = kept
+        if merged in seeded:
+            seeded[kept].extend(seeded.pop(merged))
+        if merged in require_seeds:
+            require_seeds[kept] |= require_seeds.pop(merged)
 
-    first_label_for_key: Dict[Tuple[str, str], int] = {}
+    # A join refused by a seed leaves several groups behind one key. Then try each, so a
+    # paper the first group refuses can still join another. Without seeds, retrying cannot
+    # change the result: a refused join means both groups hold titled clusters, as does
+    # every other group left behind the key.
+    groups_for_key: Dict[Tuple[str, str], List[int]] = {}
     for paper_id, label in zip(paper_ids, labels):
         is_titled = label < first_null_label
         for key in dataset.id_merge_keys(paper_id):
-            if key in first_label_for_key:
-                union(first_label_for_key[key], label, may_join_titled=join_titled and is_titled)
-            else:
-                first_label_for_key[key] = label
+            earlier = groups_for_key.get(key, [])
+            for other in earlier:
+                union(other, label, may_join_titled=join_titled and is_titled)
+            if constrained:
+                groups_for_key[key] = list(dict.fromkeys(find(group) for group in [*earlier, label]))
+            elif not earlier:
+                groups_for_key[key] = [label]
 
     # Number null-only groups consecutively, as before, so unchanged clusters keep their keys.
     renumbered: Dict[int, int] = {}
@@ -736,6 +779,7 @@ class Clusterer:
                 dataset,
                 first_null_label=next_label,
                 join_titled=self.use_default_constraints_as_supervision,
+                dont_merge_cluster_seeds=self.dont_merge_cluster_seeds,
             )
 
             for paper_id, label in zip(paper_ids_for_block, labels):

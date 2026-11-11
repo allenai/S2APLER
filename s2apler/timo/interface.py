@@ -148,7 +148,10 @@ class Predictor:
             mode="inference",
             n_jobs=self._config.n_jobs,
         )
-        if instance.cluster_seeds:
+        # Incremental mode extends the clusters that "require" seeds define; without any, it
+        # returned no clusters at all. Seeds that only disallow pairs keep the normal path, which
+        # applies them as constraints.
+        if dataset.cluster_seeds_require:
             out = self.clusterer.predict_incremental(dataset.papers, dataset)
         else:
             out = self.clusterer.predict(dataset.get_blocks(), dataset)[0]
